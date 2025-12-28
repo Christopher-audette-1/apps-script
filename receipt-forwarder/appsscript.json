@@ -16,7 +16,7 @@
     "https://www.googleapis.com/auth/gmail.send"
   ],
   "executionApi": {
-    "access": "DOMAIN"
+    "access": "ANYONE"
   },
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8"
