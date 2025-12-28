@@ -12,5 +12,9 @@
   "jsonExtensions": [
     ".json"
   ],
-  "filePushOrder": []
+  "filePushOrder": [
+    "appsscript.json",
+    "receipt-forwarder.gs",
+    "gmail-receipt-forwarder.gs"
+  ]
 }
