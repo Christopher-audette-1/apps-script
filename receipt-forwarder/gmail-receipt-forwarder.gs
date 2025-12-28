@@ -1,6 +1,7 @@
 var GMAIL_RECEIPT_EMAIL = 'receipts@venn.ca';
 var GMAIL_RECEIPT_LABEL_NAME = 'forwarded-receipt';
 var CARD_NUMBERS = ['8287', '3174', '2735', '0764'];
+var FROM_ALIAS = 'audetteadmin@audette.io';
 
 function bodyContainsCardNumber_(body) {
   for (var i = 0; i < CARD_NUMBERS.length; i++) {
@@ -26,7 +27,9 @@ function runGmailReceiptForwarder() {
       var message = messages[j];
       var body = message.getPlainBody();
       if (bodyContainsCardNumber_(body)) {
-        message.forward(GMAIL_RECEIPT_EMAIL);
+        message.forward(GMAIL_RECEIPT_EMAIL, {
+          from: FROM_ALIAS
+        });
       }
     }
     thread.addLabel(label);
