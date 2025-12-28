@@ -32,9 +32,9 @@ function previewGmailReceiptForwarder() {
   }
 }
 
-function searchForGmailReceipts_(label) {
-  var query = 'subject:(receipt OR invoice OR "order confirmation") has:attachment -label:' + label.getName();
-  return GmailApp.search(query);
+function searchForGmailReceipts_(label, max) {
+  var query = 'subject:(receipt OR invoice OR "order confirmation") -subject:(re: OR fwd:) has:attachment -from:"Audette Analytics" -label:' + label.getName();
+  return GmailApp.search(query, 0, max || 500);
 }
 
 function getOrCreateGmailLabel_() {
