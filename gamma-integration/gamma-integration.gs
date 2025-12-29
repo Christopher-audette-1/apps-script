@@ -5,6 +5,7 @@ function onOpen() {
       .addItem('Create Presentation', 'showGammaDialog')
       .addSeparator()
       .addItem('Set API Key', 'showApiKeyDialog')
+      .addItem('Set Template ID', 'showTemplateDialog')
       .addToUi();
 }
 
@@ -19,44 +20,24 @@ function saveApiKey(apiKey) {
   PropertiesService.getScriptProperties().setProperty('GAMMA_API_KEY', apiKey);
 }
 
-function showGammaDialog() {
-  var themes = getGammaThemes();
-  if (themes) {
-    var template = HtmlService.createTemplateFromFile('GammaDialog');
-    template.themes = themes;
-    template.instructions = getPresetInstructions();
-    var html = template.evaluate()
-        .setWidth(400)
-        .setHeight(250);
-    DocumentApp.getUi().showModalDialog(html, 'Send to Gamma');
-  } else {
-    DocumentApp.getUi().alert('Could not fetch Gamma themes. Please check your API key.');
-  }
+function showTemplateDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('TemplateDialog')
+      .setWidth(300)
+      .setHeight(100);
+  DocumentApp.getUi().showModalDialog(html, 'Enter Gamma Template ID');
 }
 
-function getGammaThemes() {
-  var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
-  if (!apiKey) {
-    return null;
-  }
+function saveTemplateId(templateId) {
+  PropertiesService.getScriptProperties().setProperty('GAMMA_TEMPLATE_ID', templateId);
+}
 
-  var url = 'https://public-api.gamma.app/v1.0/themes';
-  var options = {
-    method: 'get',
-    contentType: 'application/json',
-    headers: {
-      'X-API-KEY': apiKey
-    }
-  };
-
-  try {
-    var response = UrlFetchApp.fetch(url, options);
-    var jsonResponse = JSON.parse(response.getContentText());
-    return jsonResponse.data;
-  } catch (e) {
-    Logger.log('Error fetching Gamma themes: ' + e.toString());
-    return null;
-  }
+function showGammaDialog() {
+  var template = HtmlService.createTemplateFromFile('GammaDialog');
+  template.instructions = getPresetInstructions();
+  var html = template.evaluate()
+      .setWidth(400)
+      .setHeight(250);
+  DocumentApp.getUi().showModalDialog(html, 'Send to Gamma');
 }
 
 function getPresetInstructions() {
@@ -82,8 +63,7 @@ function getPresetInstructions() {
   return foundLastHr ? instructions.join('\n') : '';
 }
 
-function processForm(gammaTemplateId, instructions) {
-  Logger.log('Gamma Template ID: ' + gammaTemplateId);
+function processForm(instructions) {
   var docContent = getDocContent();
   Logger.log('Document Content: ' + docContent);
 
@@ -93,7 +73,7 @@ function processForm(gammaTemplateId, instructions) {
     return;
   }
 
-  var gammaUrl = callGammaApi(apiKey, docContent, gammaTemplateId, instructions);
+  var gammaUrl = callGammaApi(apiKey, docContent, instructions);
 
   if (gammaUrl) {
     insertGammaUrl(gammaUrl);
@@ -161,8 +141,14 @@ function getDocContent() {
   return output.join('\n');
 }
 
-function callGammaApi(apiKey, content, templateId, instructions) {
-  var url = 'https://public-api.gamma.app/v1.0/generations';
+function callGammaApi(apiKey, content, instructions) {
+  var url = 'https://public-api.gamma.app/v1.0/generations/from-template';
+  var templateId = PropertiesService.getScriptProperties().getProperty('GAMMA_TEMPLATE_ID');
+
+  if (!templateId) {
+    DocumentApp.getUi().alert('Please set your Gamma Template ID first.');
+    return null;
+  }
 
   var options = {
     method: 'post',
@@ -171,11 +157,8 @@ function callGammaApi(apiKey, content, templateId, instructions) {
       'X-API-KEY': apiKey
     },
     payload: JSON.stringify({
-      inputText: content,
-      textMode: 'preserve',
-      format: 'presentation',
-      themeId: templateId,
-      cardSplit: 'inputTextBreaks',
+      gammaId: templateId,
+      prompt: content,
       additionalInstructions: instructions
     })
   };

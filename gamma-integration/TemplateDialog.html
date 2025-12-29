@@ -4,14 +4,12 @@
     <base target="_top">
   </head>
   <body>
-    Detailed Instructions:
-    <br/>
-    <textarea id="instructions" rows="4" cols="30"><?= instructions ?></textarea>
+    Enter Gamma Template ID: <input type="text" id="templateId" />
     <br/><br/>
-    <input type="button" value="Create Presentation"
+    <input type="button" value="Save"
         onclick="google.script.run
             .withSuccessHandler(closeDialog)
-            .processForm(document.getElementById('instructions').value);" />
+            .saveTemplateId(document.getElementById('templateId').value);" />
   </body>
   <script>
     function closeDialog() {
