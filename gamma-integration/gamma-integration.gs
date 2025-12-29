@@ -5,7 +5,7 @@ function onOpen() {
       .addItem('Create Presentation', 'showGammaDialog')
       .addSeparator()
       .addItem('Set API Key', 'showApiKeyDialog')
-      .addItem('Set Template ID', 'showTemplateDialog')
+      .addItem('Add/Manage Templates', 'showAddTemplateDialog')
       .addToUi();
 }
 
@@ -20,23 +20,40 @@ function saveApiKey(apiKey) {
   PropertiesService.getScriptProperties().setProperty('GAMMA_API_KEY', apiKey);
 }
 
-function showTemplateDialog() {
-  var html = HtmlService.createHtmlOutputFromFile('TemplateDialog')
-      .setWidth(300)
-      .setHeight(100);
-  DocumentApp.getUi().showModalDialog(html, 'Enter Gamma Template ID');
+function showAddTemplateDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('AddTemplateDialog')
+      .setWidth(350)
+      .setHeight(150);
+  DocumentApp.getUi().showModalDialog(html, 'Add a New Gamma Template');
 }
 
-function saveTemplateId(templateId) {
-  PropertiesService.getScriptProperties().setProperty('GAMMA_TEMPLATE_ID', templateId);
+// Gets the list of saved templates
+function getTemplates() {
+  var properties = PropertiesService.getScriptProperties();
+  var templatesJson = properties.getProperty('GAMMA_TEMPLATES');
+  return templatesJson ? JSON.parse(templatesJson) : [];
+}
+
+// Saves a new template to the list
+function saveTemplate(name, id) {
+  var templates = getTemplates();
+  // Check if a template with the same name or id already exists and update it
+  var existingIndex = templates.findIndex(t => t.id === id);
+  if (existingIndex > -1) {
+    templates[existingIndex].name = name;
+  } else {
+    templates.push({ name: name, id: id });
+  }
+  PropertiesService.getScriptProperties().setProperty('GAMMA_TEMPLATES', JSON.stringify(templates));
 }
 
 function showGammaDialog() {
   var template = HtmlService.createTemplateFromFile('GammaDialog');
   template.instructions = getPresetInstructions();
+  template.templates = getTemplates();
   var html = template.evaluate()
       .setWidth(400)
-      .setHeight(250);
+      .setHeight(300);
   DocumentApp.getUi().showModalDialog(html, 'Send to Gamma');
 }
 
@@ -63,7 +80,7 @@ function getPresetInstructions() {
   return foundLastHr ? instructions.join('\n') : '';
 }
 
-function processForm(instructions) {
+function processForm(templateId, instructions) {
   var docContent = getDocContent();
   Logger.log('Document Content: ' + docContent);
 
@@ -73,7 +90,12 @@ function processForm(instructions) {
     return;
   }
 
-  var gammaUrl = callGammaApi(apiKey, docContent, instructions);
+  if (!templateId) {
+    DocumentApp.getUi().alert('Please select a template.');
+    return;
+  }
+
+  var gammaUrl = callGammaApi(apiKey, templateId, docContent, instructions);
 
   if (gammaUrl) {
     insertGammaUrl(gammaUrl);
@@ -141,9 +163,8 @@ function getDocContent() {
   return output.join('\n');
 }
 
-function callGammaApi(apiKey, content, instructions) {
+function callGammaApi(apiKey, templateId, content, instructions) {
   var url = 'https://public-api.gamma.app/v1.0/generations/from-template';
-  var templateId = PropertiesService.getScriptProperties().getProperty('GAMMA_TEMPLATE_ID');
 
   if (!templateId) {
     DocumentApp.getUi().alert('Please set your Gamma Template ID first.');

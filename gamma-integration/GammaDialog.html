@@ -2,20 +2,59 @@
 <html>
   <head>
     <base target="_top">
+    <style>
+      body { font-family: Arial, sans-serif; margin: 10px; }
+      .form-group { margin-bottom: 10px; }
+      label { display: block; margin-bottom: 5px; }
+      textarea, select { width: 95%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+      .button-container { text-align: right; margin-top: 15px; }
+      button { padding: 8px 12px; border: none; border-radius: 4px; background-color: #4285F4; color: white; cursor: pointer; }
+      button:hover { background-color: #357ae8; }
+    </style>
   </head>
   <body>
-    Detailed Instructions:
-    <br/>
-    <textarea id="instructions" rows="4" cols="30"><?= instructions ?></textarea>
-    <br/><br/>
-    <input type="button" value="Create Presentation"
-        onclick="google.script.run
-            .withSuccessHandler(closeDialog)
-            .processForm(document.getElementById('instructions').value);" />
+    <div class="form-group">
+      <label for="templateId">Select Gamma Template</label>
+      <select id="templateId">
+        <? if (templates && templates.length > 0) { ?>
+          <? for (var i = 0; i < templates.length; i++) { ?>
+            <option value="<?= templates[i].id ?>"><?= templates[i].name ?></option>
+          <? } ?>
+        <? } else { ?>
+          <option value="" disabled selected>No templates added yet</option>
+        <? } ?>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="instructions">Detailed Instructions (optional)</label>
+      <textarea id="instructions" rows="5"><?= instructions ?></textarea>
+    </div>
+
+    <div class="button-container">
+      <button onclick="submitForm()">Create Presentation</button>
+    </div>
+
+    <script>
+      function submitForm() {
+        var templateId = document.getElementById('templateId').value;
+        var instructions = document.getElementById('instructions').value;
+
+        if (!templateId) {
+          alert('Please select a template. If the list is empty, add one using the "Add/Manage Templates" menu.');
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function() {
+            google.script.host.close();
+          })
+          .withFailureHandler(function(error) {
+            alert('Error: ' + error.message);
+            google.script.host.close();
+          })
+          .processForm(templateId, instructions);
+      }
+    </script>
   </body>
-  <script>
-    function closeDialog() {
-      google.script.host.close();
-    }
-  </script>
 </html>
