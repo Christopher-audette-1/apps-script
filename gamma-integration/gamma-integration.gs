@@ -197,28 +197,17 @@ function getCurrentSectionContent() {
 
 function getSettingsFromFooter() {
   var footer = DocumentApp.getActiveDocument().getFooter();
-  var settings = {};
   if (footer) {
     var text = footer.getText();
     var lines = text.split('\n');
-    lines.forEach(function(line) {
-      // Ignore comments and empty lines
-      if (line.trim().startsWith('#') || line.trim() === '') {
-        return;
-      }
-      if (line.indexOf(':') > -1) {
-        var parts = line.split(/:(.+)/); // Split on the first colon only
-        var key = parts[0].trim();
-        var value = parts[1].trim();
-        if (key && value) {
-          // Sanitize key to match what the API payload builder expects
-          var sanitizedKey = key.charAt(0).toLowerCase() + key.slice(1).replace(/\s+/g, '');
-          settings[sanitizedKey] = value;
-        }
-      }
+    var filteredLines = lines.filter(function(line) {
+      return line.trim() !== 'AI Instructions';
     });
+    return {
+      generationPrompt: filteredLines.join('\n')
+    };
   }
-  return settings;
+  return { generationPrompt: '' };
 }
 
 function callGammaApi(apiKey, templateId, content, settings) {

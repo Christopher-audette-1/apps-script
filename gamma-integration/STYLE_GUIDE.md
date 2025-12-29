@@ -38,14 +38,11 @@ The script uses paragraph styles to understand your presentation's structure.
 
 ## Configuring the Generation Prompt (in Footer)
 
-The main instruction or "Generation Prompt" for the AI is set in the document's footer. This allows you to have a persistent, document-wide instruction (e.g., "Keep the tone professional").
+The main instruction for the AI, the "Generation Prompt," is taken directly from the footer of this document.
 
 1.  Open the footer (`Insert > Header & footer > Footer`).
-2.  Add or edit the `generationPrompt` key-value pair.
-    ```
-    # The main prompt for the AI.
-    generationPrompt: Make the tone of this presentation professional and inspiring.
-    ```
+2.  Enter whatever text you want to use as the prompt. The entire content of the footer will be used.
+    *   **Note:** If the footer contains a line with the exact text "AI Instructions", the script will ignore it.
 
 ## Creating and Updating a Presentation
 
