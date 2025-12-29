@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    Enter Gamma Template ID: <input type="text" id="gammaTemplateId" />
+    <br/><br/>
+    Detailed Instructions:
+    <br/>
+    <textarea id="instructions" rows="4" cols="30"></textarea>
+    <br/><br/>
+    <input type="button" value="Create Presentation"
+        onclick="google.script.run
+            .withSuccessHandler(closeDialog)
+            .processForm(document.getElementById('gammaTemplateId').value, document.getElementById('instructions').value);" />
+  </body>
+  <script>
+    function closeDialog() {
+      google.script.host.close();
+    }
+  </script>
+</html>

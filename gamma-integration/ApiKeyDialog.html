@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    Enter Gamma API Key: <input type="text" id="apiKey" />
+    <br/><br/>
+    <input type="button" value="Save"
+        onclick="google.script.run
+            .withSuccessHandler(closeDialog)
+            .saveApiKey(document.getElementById('apiKey').value);" />
+  </body>
+  <script>
+    function closeDialog() {
+      google.script.host.close();
+    }
+  </script>
+</html>
