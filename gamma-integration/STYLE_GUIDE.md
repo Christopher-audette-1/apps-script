@@ -1,97 +1,64 @@
 # Gamma Presentation Outline Style Guide
 
-This guide explains how to structure your Google Doc and manage settings to create presentations with the "Send to Gamma" script.
+This guide explains how to structure your Google Doc and use the built-in tools to create presentations with the "Send to Gamma" script.
+
+## Overview
+
+This script is designed to work on a section-by-section basis. You can manage multiple presentation outlines within this single document, with each section linked to its own unique Gamma presentation.
+
+A "section" is defined as a **Heading 1** and all the content that follows it, up to the next **Heading 1**.
 
 ## Initial Setup
 
-Before you begin, you need to configure two things: your Gamma API Key and your Gamma Template(s).
+Before you begin, you need to configure your API Key and add at least one Gamma Template.
 
 ### 1. Set Your API Key
+1.  Go to the **Send to Gamma** menu and select **Set API Key**.
+2.  Paste your API key into the dialog and click "Save". You only need to do this once.
 
-1.  Go to the **Send to Gamma** menu.
-2.  Select **Set API Key**.
-3.  Paste your API key into the dialog and click "Save". You only need to do this once.
-
-### 2. Add a Template
-
-You can add multiple Gamma templates and switch between them easily.
-
-1.  Go to the **Send to Gamma** menu.
-2.  Select **Add/Manage Templates**.
-3.  A dialog will appear asking for a **Template Name** and a **Template ID**.
-    *   **Template Name:** A friendly name you'll recognize (e.g., "Quarterly Review Deck", "Marketing Pitch").
-    *   **Template ID:** This is a unique identifier from Gamma.
+### 2. Add and Manage Templates
+1.  Go to the **Send to Gamma** menu and select **Add/Manage Templates**.
+2.  Use this dialog to add new templates by providing a name and ID, or to remove existing ones.
 
 #### How to Find Your Gamma Template ID
-
 1.  Open your desired template in Gamma.
-2.  Look at the URL in your browser's address bar.
-3.  The URL will look something like this: `https://gamma.app/docs/Untitled-g_xxxxxxxxxxxxxx`
-4.  The Template ID is the part that starts with `g_` (e.g., `g_xxxxxxxxxxxxxx`).
-5.  Copy this ID and paste it into the "Template ID" field in the Google Doc dialog.
+2.  The URL will look like: `https://gamma.app/docs/Untitled-g_xxxxxxxxxxxxxx`
+3.  The Template ID is the part that starts with `g_`. Copy this ID.
 
-4.  Click "Save Template". You can add as many templates as you like by repeating this process.
+## Structuring Your Content
 
-## Creating a Presentation
+The script uses paragraph styles to understand your presentation's structure.
 
-Once set up, creating a presentation is simple.
+*   **Section Title / Deck Title:** Use **Heading 1**. This is crucial as it marks the beginning of a section.
+*   **Slide Title:** Use **Heading 2**.
+*   **Slide Subtitle:** Use **Subtitle**.
+*   **Body Content:** Use **Normal Text**.
+*   **Slide Footer:** Use **Heading 4**.
+*   **Slide Break:** Insert a **Horizontal Rule** (`Insert > Horizontal line`) to force a new slide.
 
-1.  Go to the **Send to Gamma** menu and select **Create Presentation**.
-2.  A dialog will appear with two options:
-    *   **Select Gamma Template:** A dropdown menu will show all the templates you have added. Choose the one you want to use for this presentation.
-    *   **Detailed Instructions:** This box will be pre-filled with the "preset instructions" from the end of your document (see below). You can edit them here for this specific presentation without changing the document's preset.
-3.  Click **Create Presentation**. The script will send your outline to Gamma.
-4.  A link to the newly created Gamma presentation will be inserted at the top of your Google Doc.
+## Configuring the Generation Prompt (in Footer)
 
-## Document Structure
+The main instruction or "Generation Prompt" for the AI is set in the document's footer. This allows you to have a persistent, document-wide instruction (e.g., "Keep the tone professional").
 
-The script relies on the structure of your Google Doc to create the slides. Here's how to format your document:
+1.  Open the footer (`Insert > Header & footer > Footer`).
+2.  Add or edit the `generationPrompt` key-value pair.
+    ```
+    # The main prompt for the AI.
+    generationPrompt: Make the tone of this presentation professional and inspiring.
+    ```
 
-*   **Presentation Title:** The first line of your document should be the main title of your presentation. Use the **Title** style in Google Docs for this.
-*   **Slide Breaks:** To create a new slide, insert a **Horizontal Rule** from the "Insert" menu in Google Docs.
-*   **Slide Titles and Subtitles:**
-    *   Use **Heading 1** for the main title of a slide.
-    *   Use **Heading 2** for subtitles or section headers within a slide.
-*   **Bulleted Lists:** Use standard Google Docs bullet points to create lists.
-*   **Paragraphs:** Normal text will be treated as paragraphs.
+## Creating and Updating a Presentation
 
-## Preset Instructions
+1.  **Place your cursor** anywhere within the section you want to generate (i.e., under the desired "Heading 1").
+2.  Go to the **Send to Gamma** menu and select **Create Presentation**.
+3.  A dialog will appear.
 
-This template can include preset "Detailed Instructions" that control the overall style and layout of the presentation. These instructions are automatically loaded when you run the "Send to Gamma" script.
+### Settings
+*   **Select Gamma Template:** Choose your desired template from the dropdown.
+*   **Advanced Settings (Optional):** Click the "Advanced Settings" button to configure options like Image Style, Export Format, and Sharing Permissions for this specific generation.
 
-### Editing the Preset Instructions
+4.  Click **Create Presentation**. The script will use your content, the prompt from the footer, and the settings from the dialog to generate the presentation.
 
-To edit the preset instructions for this template:
-
-1.  Scroll to the bottom of this document.
-2.  The preset instructions are all the text that appears *after* the very last horizontal rule.
-3.  You can edit this text to change the default instructions for this template.
-
-## Example
-
-Here is an example of a well-structured outline:
-
-**[Title] My Startup Pitch**
-
----
-
-**[Heading 1] Introduction**
-
-*   Welcome to the future of...
-*   Our mission is to revolutionize the...
-
----
-
-**[Heading 1] The Problem**
-
-**[Heading 2] The Market is Underserved**
-
-The current solutions are outdated and inefficient...
-
----
-
-[...more slides...]
-
----
-
-Make the tone of this presentation professional and inspiring. The target audience is a group of potential investors. Use a minimalist black and white theme. All images should be photorealistic.
+### Link Insertion and Updates
+*   **First Time:** The script will generate a **new** presentation and insert two links ("View Presentation" and "Download Link") directly below the "Heading 1" of the current section.
+*   **Subsequent Times:** When you run the script again from the same section, it will generate a **new** presentation and **replace the old links** with the new ones. This ensures your document always points to the latest version.

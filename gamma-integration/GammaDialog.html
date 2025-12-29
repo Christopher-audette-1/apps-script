@@ -1,60 +1,144 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <base target="_top">
-    <style>
-      body { font-family: Arial, sans-serif; margin: 10px; }
-      .form-group { margin-bottom: 10px; }
-      label { display: block; margin-bottom: 5px; }
-      textarea, select { width: 95%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-      .button-container { text-align: right; margin-top: 15px; }
-      button { padding: 8px 12px; border: none; border-radius: 4px; background-color: #4285F4; color: white; cursor: pointer; }
-      button:hover { background-color: #357ae8; }
-    </style>
-  </head>
-  <body>
-    <div class="form-group">
-      <label for="templateId">Select Gamma Template</label>
-      <select id="templateId">
-        <? if (templates && templates.length > 0) { ?>
-          <? for (var i = 0; i < templates.length; i++) { ?>
-            <option value="<?= templates[i].id ?>"><?= templates[i].name ?></option>
-          <? } ?>
-        <? } else { ?>
-          <option value="" disabled selected>No templates added yet</option>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1em; color: #333; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    select, input[type="text"] {
+      width: 98%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .button-container { text-align: right; margin-top: 20px; }
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      background-color: #4285F4;
+      color: white;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    button:hover { background-color: #357ae8; }
+    .collapsible {
+      background-color: #f1f1f1;
+      color: #444;
+      cursor: pointer;
+      padding: 10px;
+      width: 100%;
+      border: none;
+      text-align: left;
+      outline: none;
+      font-size: 1em;
+      margin-top: 10px;
+      border-radius: 4px;
+    }
+    .collapsible:hover { background-color: #ddd; }
+    .content {
+      padding: 0 12px;
+      display: none;
+      overflow: hidden;
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+    }
+    .form-section { margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="form-group">
+    <label for="templateId">Select Gamma Template</label>
+    <select id="templateId">
+      <? if (templates && templates.length > 0) { ?>
+        <? for (var i = 0; i < templates.length; i++) { ?>
+          <option value="<?= templates[i].id ?>"><?= templates[i].name ?></option>
         <? } ?>
-      </select>
+      <? } else { ?>
+        <option value="" disabled selected>No templates added yet</option>
+      <? } ?>
+    </select>
+  </div>
+
+  <button type="button" class="collapsible">Advanced Settings</button>
+  <div class="content">
+    <div class="form-section">
+      <div class="form-group">
+        <label for="imageStyle">Image Style</label>
+        <input type="text" id="imageStyle" placeholder="e.g., photorealistic, minimalist">
+      </div>
+      <div class="form-group">
+        <label for="exportAs">Export As</label>
+        <select id="exportAs">
+          <option value="">None</option>
+          <option value="pdf">PDF</option>
+          <option value="pptx">PowerPoint (PPTX)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="workspaceAccess">Workspace Access</label>
+        <select id="workspaceAccess">
+          <option value="view" selected>View</option>
+          <option value="noAccess">No Access</option>
+          <option value="comment">Comment</option>
+          <option value="edit">Edit</option>
+          <option value="fullAccess">Full Access</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="externalAccess">External Access</label>
+        <select id="externalAccess">
+          <option value="view" selected>View</option>
+          <option value="noAccess">No Access</option>
+          <option value="comment">Comment</option>
+          <option value="edit">Edit</option>
+        </select>
+      </div>
     </div>
+  </div>
 
-    <div class="form-group">
-      <label for="instructions">Detailed Instructions (optional)</label>
-      <textarea id="instructions" rows="5"><?= instructions ?></textarea>
-    </div>
+  <div class="button-container">
+    <button onclick="submitForm()">Create Presentation</button>
+  </div>
 
-    <div class="button-container">
-      <button onclick="submitForm()">Create Presentation</button>
-    </div>
-
-    <script>
-      function submitForm() {
-        var templateId = document.getElementById('templateId').value;
-        var instructions = document.getElementById('instructions').value;
-
-        if (!templateId) {
-          alert('Please select a template. If the list is empty, add one using the "Add/Manage Templates" menu.');
-          return;
-        }
-
-        google.script.run
-          .withSuccessHandler(function() {
-            google.script.host.close();
-          })
-          .withFailureHandler(function(error) {
-            alert('Error: ' + error.message);
-            google.script.host.close();
-          })
-          .processForm(templateId, instructions);
+  <script>
+    // Logic for collapsible sections
+    var coll = document.getElementsByClassName("collapsible")[0];
+    coll.addEventListener("click", function() {
+      this.classList.toggle("active");
+      var content = this.nextElementSibling;
+      if (content.style.display === "block") {
+        content.style.display = "none";
+      } else {
+        content.style.display = "block";
       }
-    </script>
-  </body>
+    });
+
+    // Main form submission logic
+    function submitForm() {
+      var templateId = document.getElementById('templateId').value;
+      if (!templateId) {
+        alert('Please select a template.');
+        return;
+      }
+
+      var settings = {
+        templateId: templateId,
+        imageStyle: document.getElementById('imageStyle').value,
+        exportAs: document.getElementById('exportAs').value,
+        workspaceAccess: document.getElementById('workspaceAccess').value,
+        externalAccess: document.getElementById('externalAccess').value
+      };
+
+      google.script.run
+        .withSuccessHandler(function() { google.script.host.close(); })
+        .withFailureHandler(function(err) { alert('Error: ' + err.message); google.script.host.close(); })
+        .processForm(settings);
+    }
+  </script>
+</body>
 </html>

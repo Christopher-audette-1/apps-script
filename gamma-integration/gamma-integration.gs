@@ -22,9 +22,9 @@ function saveApiKey(apiKey) {
 
 function showAddTemplateDialog() {
   var html = HtmlService.createHtmlOutputFromFile('AddTemplateDialog')
-      .setWidth(350)
-      .setHeight(150);
-  DocumentApp.getUi().showModalDialog(html, 'Add a New Gamma Template');
+      .setWidth(400)
+      .setHeight(400);
+  DocumentApp.getUi().showModalDialog(html, 'Manage Gamma Templates');
 }
 
 // Gets the list of saved templates
@@ -47,42 +47,39 @@ function saveTemplate(name, id) {
   PropertiesService.getScriptProperties().setProperty('GAMMA_TEMPLATES', JSON.stringify(templates));
 }
 
+// Removes a template from the list by its ID
+function removeTemplate(id) {
+  var templates = getTemplates();
+  var updatedTemplates = templates.filter(function(template) {
+    return template.id !== id;
+  });
+  PropertiesService.getScriptProperties().setProperty('GAMMA_TEMPLATES', JSON.stringify(updatedTemplates));
+}
+
 function showGammaDialog() {
   var template = HtmlService.createTemplateFromFile('GammaDialog');
-  template.instructions = getPresetInstructions();
   template.templates = getTemplates();
   var html = template.evaluate()
-      .setWidth(400)
-      .setHeight(300);
-  DocumentApp.getUi().showModalDialog(html, 'Send to Gamma');
+      .setWidth(450)
+      .setHeight(400); // Adjusted height for simplified dialog
+  DocumentApp.getUi().showModalDialog(html, 'Create Gamma Presentation');
 }
 
-function getPresetInstructions() {
-  var body = DocumentApp.getActiveDocument().getBody();
-  var numElements = body.getNumChildren();
-  var instructions = [];
-  var foundLastHr = false;
-
-  for (var i = numElements - 1; i >= 0; i--) {
-    var element = body.getChild(i);
-    var type = element.getType();
-
-    if (type === DocumentApp.ElementType.HORIZONTAL_RULE) {
-      foundLastHr = true;
-      break;
-    }
-
-    if (type === DocumentApp.ElementType.PARAGRAPH) {
-      instructions.unshift(element.asParagraph().getText());
-    }
+function processForm(dialogSettings) {
+  var section = getCurrentSectionContent();
+  if (!section) {
+    DocumentApp.getUi().alert('Could not determine the current section. Please place your cursor within a section defined by a "Heading 1".');
+    return;
   }
 
-  return foundLastHr ? instructions.join('\n') : '';
-}
+  var footerSettings = getSettingsFromFooter();
 
-function processForm(templateId, instructions) {
-  var docContent = getDocContent();
-  Logger.log('Document Content: ' + docContent);
+  // Combine settings: Start with dialog settings, then add footer prompt
+  var finalSettings = dialogSettings;
+  finalSettings.generationPrompt = footerSettings.generationPrompt || '';
+
+  Logger.log('Section Content: ' + section.content);
+  Logger.log('Final Combined Settings: ' + JSON.stringify(finalSettings));
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
   if (!apiKey) {
@@ -90,40 +87,69 @@ function processForm(templateId, instructions) {
     return;
   }
 
-  if (!templateId) {
+  if (!finalSettings.templateId) {
     DocumentApp.getUi().alert('Please select a template.');
     return;
   }
 
-  var gammaUrl = callGammaApi(apiKey, templateId, docContent, instructions);
+  var gammaResponse = callGammaApi(apiKey, finalSettings.templateId, section.content, finalSettings);
 
-  if (gammaUrl) {
-    insertGammaUrl(gammaUrl);
-    Logger.log('Gamma URL: ' + gammaUrl);
+  if (gammaResponse && gammaResponse.gammaUrl) {
+    updateOrInsertLinks(section.headingElement, gammaResponse.gammaUrl, gammaResponse.downloadUrl);
+    Logger.log('Gamma URL: ' + gammaResponse.gammaUrl);
   } else {
     DocumentApp.getUi().alert('Failed to create Gamma presentation.');
   }
 }
 
-function getDocContent() {
-  var body = DocumentApp.getActiveDocument().getBody();
-  var numElements = body.getNumChildren();
-  var output = [];
-  var inList = false;
-  var lastHrIndex = -1;
+function getCurrentSectionContent() {
+  var doc = DocumentApp.getActiveDocument();
+  var cursor = doc.getCursor();
+  if (!cursor) {
+    // No cursor, likely no focused element
+    return null;
+  }
 
-  // Find the index of the last horizontal rule
-  for (var i = numElements - 1; i >= 0; i--) {
-    if (body.getChild(i).getType() === DocumentApp.ElementType.HORIZONTAL_RULE) {
-      lastHrIndex = i;
+  var body = doc.getBody();
+  var elements = body.getChildren();
+  var cursorElement = cursor.getElement();
+  var cursorIndex = elements.indexOf(cursorElement);
+
+  var sectionStartIndex = -1;
+  var sectionEndIndex = -1;
+  var headingElement = null;
+
+  // Find the "Heading 1" that marks the beginning of the current section
+  for (var i = cursorIndex; i >= 0; i--) {
+    var el = elements[i];
+    if (el.getType() === DocumentApp.ElementType.PARAGRAPH && el.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
+      sectionStartIndex = i;
+      headingElement = el;
       break;
     }
   }
 
-  var elementsToProcess = lastHrIndex === -1 ? numElements : lastHrIndex;
+  if (sectionStartIndex === -1) {
+    return null; // Not in a section
+  }
 
-  for (var i = 0; i < elementsToProcess; i++) {
-    var element = body.getChild(i);
+  // Find the end of the section (the next "Heading 1" or the end of the document)
+  for (var i = sectionStartIndex + 1; i < elements.length; i++) {
+    var el = elements[i];
+    if (el.getType() === DocumentApp.ElementType.PARAGRAPH && el.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
+      sectionEndIndex = i;
+      break;
+    }
+  }
+  if (sectionEndIndex === -1) {
+    sectionEndIndex = elements.length;
+  }
+
+  // Now, parse only the content within this section
+  var output = [];
+  var inList = false;
+  for (var i = sectionStartIndex; i < sectionEndIndex; i++) {
+    var element = elements[i];
     var type = element.getType();
 
     if (type === DocumentApp.ElementType.PARAGRAPH) {
@@ -134,64 +160,107 @@ function getDocContent() {
 
       if (text.trim() === '') continue;
 
-      if (heading === DocumentApp.ParagraphHeading.TITLE) {
-        output.push('# ' + text);
-      } else if (heading === DocumentApp.ParagraphHeading.HEADING1) {
-        output.push('## ' + text);
-      } else if (heading === DocumentApp.ParagraphHeading.HEADING2) {
-        output.push('### ' + text);
-      } else {
-        output.push('\n' + text);
+      switch (heading) {
+        case DocumentApp.ParagraphHeading.HEADING1:
+          output.push('# ' + text);
+          break;
+        case DocumentApp.ParagraphHeading.HEADING2:
+          output.push('\n## ' + text);
+          break;
+        case DocumentApp.ParagraphHeading.SUBTITLE:
+          output.push('### ' + text);
+          break;
+        case DocumentApp.ParagraphHeading.HEADING4:
+          output.push('\n**Footer:** ' + text);
+          break;
+        case DocumentApp.ParagraphHeading.NORMAL:
+        default:
+          output.push(text);
+          break;
       }
     } else if (type === DocumentApp.ElementType.HORIZONTAL_RULE) {
       inList = false;
       output.push('\n---\n');
     } else if (type === DocumentApp.ElementType.LIST_ITEM) {
-      if (!inList) {
-        output.push('');
-        inList = true;
-      }
+      if (!inList) { output.push(''); inList = true; }
       var listItem = element.asListItem();
-      var prefix = '';
-      for (var j = 0; j < listItem.getNestingLevel(); j++) {
-        prefix += '  ';
-      }
+      var prefix = ' '.repeat(listItem.getNestingLevel() * 2);
       output.push(prefix + '* ' + listItem.getText());
     }
   }
 
-  return output.join('\n');
+  return {
+    content: output.join('\n'),
+    headingElement: headingElement
+  };
 }
 
-function callGammaApi(apiKey, templateId, content, instructions) {
-  var url = 'https://public-api.gamma.app/v1.0/generations/from-template';
+function getSettingsFromFooter() {
+  var footer = DocumentApp.getActiveDocument().getFooter();
+  var settings = {};
+  if (footer) {
+    var text = footer.getText();
+    var lines = text.split('\n');
+    lines.forEach(function(line) {
+      // Ignore comments and empty lines
+      if (line.trim().startsWith('#') || line.trim() === '') {
+        return;
+      }
+      if (line.indexOf(':') > -1) {
+        var parts = line.split(/:(.+)/); // Split on the first colon only
+        var key = parts[0].trim();
+        var value = parts[1].trim();
+        if (key && value) {
+          // Sanitize key to match what the API payload builder expects
+          var sanitizedKey = key.charAt(0).toLowerCase() + key.slice(1).replace(/\s+/g, '');
+          settings[sanitizedKey] = value;
+        }
+      }
+    });
+  }
+  return settings;
+}
+
+function callGammaApi(apiKey, templateId, content, settings) {
+  var generationUrl = 'https://public-api.gamma.app/v1.0/generations/from-template';
 
   if (!templateId) {
     DocumentApp.getUi().alert('Please set your Gamma Template ID first.');
     return null;
   }
 
+  // Base payload
+  var payload = {
+    gammaId: templateId,
+    prompt: content
+  };
+
+  // Add optional parameters
+  if (settings.generationPrompt) payload.additionalInstructions = settings.generationPrompt;
+  if (settings.exportAs) payload.exportAs = settings.exportAs;
+  if (settings.imageStyle) payload.imageOptions = { style: settings.imageStyle };
+  if (settings.workspaceAccess || settings.externalAccess) {
+    payload.sharingOptions = {};
+    if (settings.workspaceAccess) payload.sharingOptions.workspaceAccess = settings.workspaceAccess;
+    if (settings.externalAccess) payload.sharingOptions.externalAccess = settings.externalAccess;
+  }
+
   var options = {
     method: 'post',
     contentType: 'application/json',
-    headers: {
-      'X-API-KEY': apiKey
-    },
-    payload: JSON.stringify({
-      gammaId: templateId,
-      prompt: content,
-      additionalInstructions: instructions
-    })
+    headers: { 'X-API-KEY': apiKey },
+    payload: JSON.stringify(payload)
   };
 
   try {
-    var response = UrlFetchApp.fetch(url, options);
+    var response = UrlFetchApp.fetch(generationUrl, options);
     var jsonResponse = JSON.parse(response.getContentText());
 
-    if (jsonResponse && jsonResponse.gamma && jsonResponse.gamma.shareUrl) {
-      return jsonResponse.gamma.shareUrl;
+    if (jsonResponse.generationId) {
+      // Poll for completion
+      return pollForPresentation(apiKey, jsonResponse.generationId);
     } else {
-      Logger.log('Invalid response from Gamma API: ' + response.getContentText());
+      Logger.log('Failed to initiate generation: ' + response.getContentText());
       return null;
     }
   } catch (e) {
@@ -200,7 +269,61 @@ function callGammaApi(apiKey, templateId, content, instructions) {
   }
 }
 
-function insertGammaUrl(url) {
+function pollForPresentation(apiKey, generationId) {
+  var statusUrl = 'https://public-api.gamma.app/v1.0/generations/' + generationId;
+  var options = {
+    method: 'get',
+    headers: { 'X-API-KEY': apiKey }
+  };
+
+  for (var i = 0; i < 10; i++) { // Poll for a reasonable time
+    Utilities.sleep(3000); // Wait for 3 seconds
+    var response = UrlFetchApp.fetch(statusUrl, options);
+    var jsonResponse = JSON.parse(response.getContentText());
+
+    if (jsonResponse.status === 'completed') {
+      return {
+        gammaUrl: jsonResponse.gamma.shareUrl,
+        downloadUrl: jsonResponse.gamma.exportUrl || null // exportUrl may not always be present
+      };
+    } else if (jsonResponse.status === 'failed') {
+      Logger.log('Generation failed: ' + jsonResponse.error);
+      return null;
+    }
+    // if "pending", continue loop
+  }
+  Logger.log('Polling timed out for generation ID: ' + generationId);
+  return null;
+}
+
+function updateOrInsertLinks(headingElement, viewUrl, downloadUrl) {
   var body = DocumentApp.getActiveDocument().getBody();
-  body.insertParagraph(0, 'Gamma Presentation URL: ' + url);
+  var headingIndex = body.getChildIndex(headingElement);
+  var linkParaIndex = headingIndex + 1;
+  var nextElement = body.getChild(linkParaIndex);
+
+  // Check if the element immediately following the heading is our link paragraph
+  var linkIdentifier = 'Gamma Links:';
+  if (nextElement && nextElement.getType() === DocumentApp.ElementType.PARAGRAPH && nextElement.asText().getText().startsWith(linkIdentifier)) {
+    // It's our link paragraph, so update it
+    var linkPara = nextElement.asParagraph();
+    linkPara.clear();
+    linkPara.appendText(linkIdentifier);
+    linkPara.appendText('\n');
+    linkPara.appendText('View Presentation: ' + viewUrl);
+    if (downloadUrl) {
+      linkPara.appendText('\n');
+      linkPara.appendText('Download Link: ' + downloadUrl);
+    }
+  } else {
+    // It's not our link paragraph, so insert a new one
+    var newPara = body.insertParagraph(linkParaIndex, '');
+    newPara.appendText(linkIdentifier);
+    newPara.appendText('\n');
+    newPara.appendText('View Presentation: ' + viewUrl);
+    if (downloadUrl) {
+      newPara.appendText('\n');
+      newPara.appendText('Download Link: ' + downloadUrl);
+    }
+  }
 }

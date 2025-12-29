@@ -3,16 +3,32 @@
   <head>
     <base target="_top">
     <style>
-      body { font-family: Arial, sans-serif; margin: 10px; }
+      body { font-family: Arial, sans-serif; margin: 1em; }
+      h3 { border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 20px; }
       .form-group { margin-bottom: 10px; }
-      label { display: block; margin-bottom: 5px; }
+      label { display: block; margin-bottom: 5px; font-weight: bold; }
       input[type="text"] { width: 95%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
       .button-container { text-align: right; margin-top: 15px; }
       button { padding: 8px 12px; border: none; border-radius: 4px; background-color: #4285F4; color: white; cursor: pointer; }
       button:hover { background-color: #357ae8; }
+      .template-list { list-style-type: none; padding: 0; }
+      .template-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
+      .template-name { font-size: 1em; }
+      .template-id { font-size: 0.8em; color: #777; }
+      .remove-btn { background-color: #db4437; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; border: none; }
+      .remove-btn:hover { background-color: #c5372c; }
+      hr { margin: 20px 0; }
     </style>
   </head>
   <body>
+    <h3>Manage Templates</h3>
+    <div id="existing-templates">
+      <p>Loading...</p>
+    </div>
+
+    <hr>
+
+    <h3>Add New Template</h3>
     <div class="form-group">
       <label for="templateName">Template Name</label>
       <input type="text" id="templateName" placeholder="e.g., Marketing Pitch">
@@ -22,26 +38,76 @@
       <input type="text" id="templateId" placeholder="e.g., g_54wsziqufx4bdt3">
     </div>
     <div class="button-container">
-      <button onclick="save()">Save Template</button>
+      <button onclick="addTemplate()">Save New Template</button>
     </div>
 
     <script>
-      function save() {
+      // Load templates when the dialog opens
+      document.addEventListener("DOMContentLoaded", function() {
+        fetchTemplates();
+      });
+
+      function fetchTemplates() {
+        google.script.run.withSuccessHandler(displayTemplates).getTemplates();
+      }
+
+      function displayTemplates(templates) {
+        var container = document.getElementById('existing-templates');
+        if (templates.length === 0) {
+          container.innerHTML = '<p>No templates have been added yet.</p>';
+          return;
+        }
+
+        var listHtml = '<ul class="template-list">';
+        templates.forEach(function(template) {
+          listHtml += `
+            <li class="template-item" id="template-${template.id}">
+              <div>
+                <div class="template-name">${template.name}</div>
+                <div class="template-id">ID: ${template.id}</div>
+              </div>
+              <button class="remove-btn" onclick="removeTemplate('${template.id}')">Remove</button>
+            </li>`;
+        });
+        listHtml += '</ul>';
+        container.innerHTML = listHtml;
+      }
+
+      function addTemplate() {
         var name = document.getElementById('templateName').value;
         var id = document.getElementById('templateId').value;
         if (name && id) {
           google.script.run
             .withSuccessHandler(function() {
-              google.script.host.close();
+              document.getElementById('templateName').value = '';
+              document.getElementById('templateId').value = '';
+              fetchTemplates(); // Refresh the list
             })
-            .withFailureHandler(function(error) {
-              alert(error.message);
-              google.script.host.close();
-            })
+            .withFailureHandler(handleError)
             .saveTemplate(name, id);
         } else {
           alert('Please enter both a name and an ID.');
         }
+      }
+
+      function removeTemplate(id) {
+        // Find the specific item in the list and show a "removing..." state if desired
+        var item = document.getElementById('template-' + id);
+        if (item) {
+          item.style.opacity = '0.5';
+        }
+
+        google.script.run
+          .withSuccessHandler(function() {
+            fetchTemplates(); // Refresh the list after successful removal
+          })
+          .withFailureHandler(handleError)
+          .removeTemplate(id);
+      }
+
+      function handleError(error) {
+        alert('An error occurred: ' + error.message);
+        fetchTemplates(); // Refresh the list to show the actual state
       }
     </script>
   </body>
