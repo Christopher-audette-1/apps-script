@@ -16,7 +16,7 @@ function showApiKeyDialog() {
 }
 
 function saveApiKey(apiKey) {
-  PropertiesService.getUserProperties().setProperty('GAMMA_API_KEY', apiKey);
+  PropertiesService.getScriptProperties().setProperty('GAMMA_API_KEY', apiKey);
 }
 
 function showGammaDialog() {
@@ -31,7 +31,7 @@ function processForm(gammaTemplateId, instructions) {
   var docContent = getDocContent();
   Logger.log('Document Content: ' + docContent);
 
-  var apiKey = PropertiesService.getUserProperties().getProperty('GAMMA_API_KEY');
+  var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
   if (!apiKey) {
     DocumentApp.getUi().alert('Please set your Gamma API key first.');
     return;
