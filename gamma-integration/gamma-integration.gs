@@ -51,12 +51,14 @@ function getDocContent() {
   var body = DocumentApp.getActiveDocument().getBody();
   var numElements = body.getNumChildren();
   var output = [];
+  var inList = false;
 
   for (var i = 0; i < numElements; i++) {
     var element = body.getChild(i);
     var type = element.getType();
 
     if (type === DocumentApp.ElementType.PARAGRAPH) {
+      inList = false;
       var paragraph = element.asParagraph();
       var heading = paragraph.getHeading();
       var text = paragraph.getText();
@@ -65,17 +67,23 @@ function getDocContent() {
 
       if (heading === DocumentApp.ParagraphHeading.TITLE) {
         output.push('# ' + text);
-      } else if (heading === DocumentApp.ParagraphHeading.HEADING2) {
+      } else if (heading === DocumentApp.ParagraphHeading.HEADING1) {
         output.push('## ' + text);
+      } else if (heading === DocumentApp.ParagraphHeading.HEADING2) {
+        output.push('### ' + text);
       } else {
-        output.push(text);
+        output.push('\n' + text);
       }
     } else if (type === DocumentApp.ElementType.HORIZONTAL_RULE) {
-      output.push('---');
+      inList = false;
+      output.push('\n---\n');
     } else if (type === DocumentApp.ElementType.LIST_ITEM) {
+      if (!inList) {
+        output.push('');
+        inList = true;
+      }
       var listItem = element.asListItem();
       var prefix = '';
-      // Nesting level is not perfectly translated, but this is a start
       for (var j = 0; j < listItem.getNestingLevel(); j++) {
         prefix += '  ';
       }
@@ -100,6 +108,7 @@ function callGammaApi(apiKey, content, templateId, instructions) {
       textMode: 'preserve',
       format: 'presentation',
       themeId: templateId,
+      cardSplit: 'inputTextBreaks',
       additionalInstructions: instructions
     })
   };
