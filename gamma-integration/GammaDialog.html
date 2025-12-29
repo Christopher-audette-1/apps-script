@@ -4,11 +4,16 @@
     <base target="_top">
   </head>
   <body>
-    Enter Gamma Template ID: <input type="text" id="gammaTemplateId" />
+    <label for="gammaTemplateId">Select a Gamma Template:</label>
+    <select id="gammaTemplateId">
+      <? for(var i = 0; i < themes.length; i++) { ?>
+        <option value="<?= themes[i].id ?>"><?= themes[i].name ?></option>
+      <? } ?>
+    </select>
     <br/><br/>
     Detailed Instructions:
     <br/>
-    <textarea id="instructions" rows="4" cols="30"></textarea>
+    <textarea id="instructions" rows="4" cols="30"><?= instructions ?></textarea>
     <br/><br/>
     <input type="button" value="Create Presentation"
         onclick="google.script.run

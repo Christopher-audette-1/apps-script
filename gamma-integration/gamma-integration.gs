@@ -20,10 +20,66 @@ function saveApiKey(apiKey) {
 }
 
 function showGammaDialog() {
-  var html = HtmlService.createHtmlOutputFromFile('GammaDialog')
-      .setWidth(400)
-      .setHeight(250);
-  DocumentApp.getUi().showModalDialog(html, 'Enter Gamma Template');
+  var themes = getGammaThemes();
+  if (themes) {
+    var template = HtmlService.createTemplateFromFile('GammaDialog');
+    template.themes = themes;
+    template.instructions = getPresetInstructions();
+    var html = template.evaluate()
+        .setWidth(400)
+        .setHeight(250);
+    DocumentApp.getUi().showModalDialog(html, 'Send to Gamma');
+  } else {
+    DocumentApp.getUi().alert('Could not fetch Gamma themes. Please check your API key.');
+  }
+}
+
+function getGammaThemes() {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
+  if (!apiKey) {
+    return null;
+  }
+
+  var url = 'https://public-api.gamma.app/v1.0/themes';
+  var options = {
+    method: 'get',
+    contentType: 'application/json',
+    headers: {
+      'X-API-KEY': apiKey
+    }
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(url, options);
+    var jsonResponse = JSON.parse(response.getContentText());
+    return jsonResponse.data;
+  } catch (e) {
+    Logger.log('Error fetching Gamma themes: ' + e.toString());
+    return null;
+  }
+}
+
+function getPresetInstructions() {
+  var body = DocumentApp.getActiveDocument().getBody();
+  var numElements = body.getNumChildren();
+  var instructions = [];
+  var foundLastHr = false;
+
+  for (var i = numElements - 1; i >= 0; i--) {
+    var element = body.getChild(i);
+    var type = element.getType();
+
+    if (type === DocumentApp.ElementType.HORIZONTAL_RULE) {
+      foundLastHr = true;
+      break;
+    }
+
+    if (type === DocumentApp.ElementType.PARAGRAPH) {
+      instructions.unshift(element.asParagraph().getText());
+    }
+  }
+
+  return foundLastHr ? instructions.join('\n') : '';
 }
 
 function processForm(gammaTemplateId, instructions) {
@@ -52,8 +108,19 @@ function getDocContent() {
   var numElements = body.getNumChildren();
   var output = [];
   var inList = false;
+  var lastHrIndex = -1;
 
-  for (var i = 0; i < numElements; i++) {
+  // Find the index of the last horizontal rule
+  for (var i = numElements - 1; i >= 0; i--) {
+    if (body.getChild(i).getType() === DocumentApp.ElementType.HORIZONTAL_RULE) {
+      lastHrIndex = i;
+      break;
+    }
+  }
+
+  var elementsToProcess = lastHrIndex === -1 ? numElements : lastHrIndex;
+
+  for (var i = 0; i < elementsToProcess; i++) {
     var element = body.getChild(i);
     var type = element.getType();
 
