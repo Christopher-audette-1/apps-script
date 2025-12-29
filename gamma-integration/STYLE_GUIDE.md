@@ -57,5 +57,5 @@ The main instruction for the AI, the "Generation Prompt," is taken directly from
 4.  Click **Create Presentation**. The script will use your content, the prompt from the footer, and the settings from the dialog to generate the presentation.
 
 ### Link Insertion and Updates
-*   **First Time:** The script will generate a **new** presentation and insert two links ("View Presentation" and "Download Link") directly below the "Heading 1" of the current section.
-*   **Subsequent Times:** When you run the script again from the same section, it will generate a **new** presentation and **replace the old links** with the new ones. This ensures your document always points to the latest version.
+*   **First Time:** The script will generate a **new** presentation and append two hyperlinks ("View" and "Download") to the end of the "Heading 1" title of the current section.
+*   **Subsequent Times:** When you run the script again from the same section, it will generate a **new** presentation and **replace the old hyperlinks** with the new ones. This ensures your document always points to the latest version.

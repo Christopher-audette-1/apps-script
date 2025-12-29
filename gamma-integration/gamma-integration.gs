@@ -9,6 +9,112 @@ function onOpen() {
       .addToUi();
 }
 
+function getElementPath(element) {
+  var path = [];
+  var current = element;
+  while (current.getParent().getType() !== DocumentApp.ElementType.BODY_SECTION) {
+    var parent = current.getParent();
+    var index = parent.getChildIndex(current);
+    path.unshift(index);
+    current = parent;
+  }
+  var body = DocumentApp.getActiveDocument().getBody();
+  path.unshift(body.getChildIndex(current));
+  return path.join('/');
+}
+
+function findElementByPath(path) {
+  var body = DocumentApp.getActiveDocument().getBody();
+  var pathParts = path.split('/');
+  var element = body;
+  for (var i = 0; i < pathParts.length; i++) {
+    var index = parseInt(pathParts[i], 10);
+    if (element && typeof element.getChild === 'function' && index < element.getNumChildren()) {
+      element = element.getChild(index);
+    } else {
+      return null; // Path is invalid
+    }
+  }
+  return element;
+}
+
+function checkGammaStatus(e) {
+  var triggerUid = e.triggerUid;
+  var userProperties = PropertiesService.getUserProperties();
+  var jobData = JSON.parse(userProperties.getProperty('gammaJob_' + triggerUid));
+
+  if (!jobData) {
+    Logger.log('No job data found for trigger: ' + triggerUid + '. Cleaning up.');
+    deleteTrigger(triggerUid);
+    return;
+  }
+
+  jobData.attempts++;
+  if (jobData.attempts > 12) { // 12 attempts * 5 minutes = 1 hour
+    Logger.log('Job timed out for trigger: ' + triggerUid + '. Cleaning up.');
+    userProperties.deleteProperty('gammaJob_' + triggerUid);
+    deleteTrigger(triggerUid);
+    return;
+  }
+
+  userProperties.setProperty('gammaJob_' + triggerUid, JSON.stringify(jobData));
+
+  var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
+  var statusUrl = 'https://public-api.gamma.app/v1.0/generations/' + jobData.generationId;
+  var options = {
+    method: 'get',
+    headers: {
+      'X-API-KEY': apiKey,
+      'Authorization': 'Bearer ' + ScriptApp.getOAuthToken()
+    },
+    muteHttpExceptions: true
+  };
+
+  try {
+    Logger.log('Fetching status for ' + jobData.generationId + ' with trigger ' + triggerUid);
+    var response = UrlFetchApp.fetch(statusUrl, options);
+    var responseCode = response.getResponseCode();
+    var responseBody = response.getContentText();
+    Logger.log('Poll response code: ' + responseCode + '; body: ' + responseBody);
+
+    if (responseCode !== 200) {
+      throw new Error('Received non-200 response: ' + responseBody);
+    }
+
+    var jsonResponse = JSON.parse(responseBody);
+
+    if (jsonResponse.status === 'completed' && jsonResponse.gammaUrl) {
+      var headingElement = findElementByPath(jobData.headingPath);
+      if (headingElement) {
+        updateOrInsertLinks(headingElement, jsonResponse.gammaUrl, jsonResponse.exportUrl || null);
+        Logger.log('Successfully inserted links for generation ID: ' + jobData.generationId);
+      } else {
+        Logger.log('Could not find heading element to insert links for generation ID: ' + jobData.generationId);
+      }
+      userProperties.deleteProperty('gammaJob_' + triggerUid);
+      deleteTrigger(triggerUid);
+    } else if (jsonResponse.status === 'failed') {
+      Logger.log('Generation failed for trigger ' + triggerUid + ': ' + jsonResponse.error);
+      userProperties.deleteProperty('gammaJob_' + triggerUid);
+      deleteTrigger(triggerUid);
+    } else {
+      Logger.log('Generation still pending for trigger: ' + triggerUid);
+    }
+  } catch (err) {
+    Logger.log('Error checking Gamma status for trigger ' + triggerUid + ': ' + err.toString());
+  }
+}
+
+function deleteTrigger(triggerUid) {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getUniqueId() === triggerUid) {
+      ScriptApp.deleteTrigger(trigger);
+      Logger.log('Deleted trigger: ' + triggerUid);
+    }
+  });
+}
+
+
 function showApiKeyDialog() {
   var html = HtmlService.createHtmlOutputFromFile('ApiKeyDialog')
       .setWidth(300)
@@ -73,13 +179,8 @@ function processForm(dialogSettings) {
   }
 
   var footerSettings = getSettingsFromFooter();
-
-  // Combine settings: Start with dialog settings, then add footer prompt
   var finalSettings = dialogSettings;
   finalSettings.generationPrompt = footerSettings.generationPrompt || '';
-
-  Logger.log('Section Content: ' + section.content);
-  Logger.log('Final Combined Settings: ' + JSON.stringify(finalSettings));
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
   if (!apiKey) {
@@ -92,36 +193,85 @@ function processForm(dialogSettings) {
     return;
   }
 
-  var gammaResponse = callGammaApi(apiKey, finalSettings.templateId, section.content, finalSettings);
+  var generationId = callGammaApi(apiKey, finalSettings.templateId, section.content, finalSettings);
 
-  if (gammaResponse && gammaResponse.gammaUrl) {
-    updateOrInsertLinks(section.headingElement, gammaResponse.gammaUrl, gammaResponse.downloadUrl);
-    Logger.log('Gamma URL: ' + gammaResponse.gammaUrl);
+  if (generationId) {
+    var headingPath = getElementPath(section.headingElement);
+
+    var trigger = ScriptApp.newTrigger('checkGammaStatus')
+        .timeBased()
+        .everyMinutes(5)
+        .create();
+
+    var triggerUid = trigger.getUniqueId();
+
+    var jobData = {
+      generationId: generationId,
+      headingPath: headingPath,
+      triggerUid: triggerUid,
+      attempts: 0
+    };
+
+    PropertiesService.getUserProperties().setProperty('gammaJob_' + triggerUid, JSON.stringify(jobData));
+
+    DocumentApp.getUi().alert('Presentation started! The final link will be added below the section title in a few minutes.');
   } else {
-    DocumentApp.getUi().alert('Failed to create Gamma presentation.');
+    DocumentApp.getUi().alert('Failed to start Gamma presentation generation.');
   }
 }
 
 function getCurrentSectionContent() {
   var doc = DocumentApp.getActiveDocument();
   var cursor = doc.getCursor();
+
   if (!cursor) {
-    // No cursor, likely no focused element
     return null;
   }
 
-  var body = doc.getBody();
-  var elements = body.getChildren();
   var cursorElement = cursor.getElement();
-  var cursorIndex = elements.indexOf(cursorElement);
+  while (cursorElement.getParent().getType() !== DocumentApp.ElementType.BODY_SECTION) {
+    cursorElement = cursorElement.getParent();
+  }
+
+  // Sibling traversal to build the element list
+  var allElements = [];
+  var firstElement = cursorElement;
+  while (firstElement.getPreviousSibling() != null) {
+    firstElement = firstElement.getPreviousSibling();
+  }
+  var currentElement = firstElement;
+  while (currentElement != null) {
+    allElements.push(currentElement);
+    currentElement = currentElement.getNextSibling();
+  }
+
+  // Find the index of the cursor element
+  var cursorIndex = -1;
+  for(var i = 0; i < allElements.length; i++) {
+    if (allElements[i].isAtDocumentEnd() === cursorElement.isAtDocumentEnd() &&
+        allElements[i].getAttributes() === cursorElement.getAttributes() &&
+        allElements[i].getText() === cursorElement.getText()) {
+      cursorIndex = i;
+      break;
+    }
+  }
+
+  if (cursorIndex === -1) {
+    // This is a fallback, but the above should work.
+    try {
+      var body = doc.getBody();
+      cursorIndex = body.getChildIndex(cursorElement);
+    } catch(e) {
+      DocumentApp.getUi().alert('Critical Error: Could not determine cursor position.');
+      return null;
+    }
+  }
+
 
   var sectionStartIndex = -1;
-  var sectionEndIndex = -1;
   var headingElement = null;
-
-  // Find the "Heading 1" that marks the beginning of the current section
   for (var i = cursorIndex; i >= 0; i--) {
-    var el = elements[i];
+    var el = allElements[i];
     if (el.getType() === DocumentApp.ElementType.PARAGRAPH && el.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
       sectionStartIndex = i;
       headingElement = el;
@@ -130,26 +280,25 @@ function getCurrentSectionContent() {
   }
 
   if (sectionStartIndex === -1) {
-    return null; // Not in a section
+    return null;
   }
 
-  // Find the end of the section (the next "Heading 1" or the end of the document)
-  for (var i = sectionStartIndex + 1; i < elements.length; i++) {
-    var el = elements[i];
+  var sectionEndIndex = -1;
+  for (var i = sectionStartIndex + 1; i < allElements.length; i++) {
+    var el = allElements[i];
     if (el.getType() === DocumentApp.ElementType.PARAGRAPH && el.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
       sectionEndIndex = i;
       break;
     }
   }
   if (sectionEndIndex === -1) {
-    sectionEndIndex = elements.length;
+    sectionEndIndex = allElements.length;
   }
 
-  // Now, parse only the content within this section
   var output = [];
   var inList = false;
   for (var i = sectionStartIndex; i < sectionEndIndex; i++) {
-    var element = elements[i];
+    var element = allElements[i];
     var type = element.getType();
 
     if (type === DocumentApp.ElementType.PARAGRAPH) {
@@ -225,7 +374,6 @@ function callGammaApi(apiKey, templateId, content, settings) {
   };
 
   // Add optional parameters
-  if (settings.generationPrompt) payload.additionalInstructions = settings.generationPrompt;
   if (settings.exportAs) payload.exportAs = settings.exportAs;
   if (settings.imageStyle) payload.imageOptions = { style: settings.imageStyle };
   if (settings.workspaceAccess || settings.externalAccess) {
@@ -246,8 +394,7 @@ function callGammaApi(apiKey, templateId, content, settings) {
     var jsonResponse = JSON.parse(response.getContentText());
 
     if (jsonResponse.generationId) {
-      // Poll for completion
-      return pollForPresentation(apiKey, jsonResponse.generationId);
+      return jsonResponse.generationId;
     } else {
       Logger.log('Failed to initiate generation: ' + response.getContentText());
       return null;
@@ -258,61 +405,44 @@ function callGammaApi(apiKey, templateId, content, settings) {
   }
 }
 
-function pollForPresentation(apiKey, generationId) {
-  var statusUrl = 'https://public-api.gamma.app/v1.0/generations/' + generationId;
-  var options = {
-    method: 'get',
-    headers: { 'X-API-KEY': apiKey }
-  };
-
-  for (var i = 0; i < 10; i++) { // Poll for a reasonable time
-    Utilities.sleep(3000); // Wait for 3 seconds
-    var response = UrlFetchApp.fetch(statusUrl, options);
-    var jsonResponse = JSON.parse(response.getContentText());
-
-    if (jsonResponse.status === 'completed') {
-      return {
-        gammaUrl: jsonResponse.gamma.shareUrl,
-        downloadUrl: jsonResponse.gamma.exportUrl || null // exportUrl may not always be present
-      };
-    } else if (jsonResponse.status === 'failed') {
-      Logger.log('Generation failed: ' + jsonResponse.error);
-      return null;
-    }
-    // if "pending", continue loop
-  }
-  Logger.log('Polling timed out for generation ID: ' + generationId);
-  return null;
-}
-
 function updateOrInsertLinks(headingElement, viewUrl, downloadUrl) {
   var body = DocumentApp.getActiveDocument().getBody();
   var headingIndex = body.getChildIndex(headingElement);
   var linkParaIndex = headingIndex + 1;
-  var nextElement = body.getChild(linkParaIndex);
 
-  // Check if the element immediately following the heading is our link paragraph
-  var linkIdentifier = 'Gamma Links:';
-  if (nextElement && nextElement.getType() === DocumentApp.ElementType.PARAGRAPH && nextElement.asText().getText().startsWith(linkIdentifier)) {
-    // It's our link paragraph, so update it
-    var linkPara = nextElement.asParagraph();
-    linkPara.clear();
-    linkPara.appendText(linkIdentifier);
-    linkPara.appendText('\n');
-    linkPara.appendText('View Presentation: ' + viewUrl);
-    if (downloadUrl) {
-      linkPara.appendText('\n');
-      linkPara.appendText('Download Link: ' + downloadUrl);
+  // 1. Remove the old separate link paragraph if it exists
+  if (linkParaIndex < body.getNumChildren()) {
+    var nextElement = body.getChild(linkParaIndex);
+    var linkIdentifier = 'Gamma Links:';
+    if (nextElement && nextElement.getType() === DocumentApp.ElementType.PARAGRAPH && nextElement.asText().getText().startsWith(linkIdentifier)) {
+      body.removeChild(nextElement);
     }
-  } else {
-    // It's not our link paragraph, so insert a new one
-    var newPara = body.insertParagraph(linkParaIndex, '');
-    newPara.appendText(linkIdentifier);
-    newPara.appendText('\n');
-    newPara.appendText('View Presentation: ' + viewUrl);
-    if (downloadUrl) {
-      newPara.appendText('\n');
-      newPara.appendText('Download Link: ' + downloadUrl);
-    }
+  }
+
+  // 2. Work with the heading paragraph
+  if (headingElement.getType() !== DocumentApp.ElementType.PARAGRAPH) {
+    Logger.log('The provided heading element is not a Paragraph.');
+    return;
+  }
+  var headingPara = headingElement.asParagraph();
+  var headingText = headingPara.getText();
+
+  // 3. Remove any previously added links to make the operation idempotent
+  var linkMarker = ' - View';
+  var markerIndex = headingText.indexOf(linkMarker);
+  if (markerIndex !== -1) {
+    // This removes the text from the marker onwards.
+    headingPara.editAsText().deleteText(markerIndex, headingText.length - 1);
+  }
+
+  // 4. Add the new hyperlinks
+  headingPara.appendText(' - ');
+  var viewText = headingPara.appendText('View');
+  viewText.setLinkUrl(viewUrl);
+
+  if (downloadUrl) {
+    headingPara.appendText(' | ');
+    var downloadText = headingPara.appendText('Download');
+    downloadText.setLinkUrl(downloadUrl);
   }
 }
