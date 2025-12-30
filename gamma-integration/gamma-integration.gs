@@ -455,7 +455,7 @@ function callGammaApi(apiKey, templateId, content, settings) {
     var responseBody = response.getContentText();
     var jsonResponse = JSON.parse(responseBody);
 
-    if (responseCode === 200 && jsonResponse.generationId) {
+    if (responseCode >= 200 && responseCode < 300 && jsonResponse.generationId) {
       return jsonResponse.generationId;
     } else {
       var errorMessage = "Failed to start Gamma presentation generation.";
@@ -544,18 +544,7 @@ function startGeneration(settings) {
     return;
   }
 
-  var markdownContent = section.content;
-
-  // Construct the new instructional prompt
-  var prompt = "Please populate the Gamma template with the following content. Here are the rules for mapping the content to the placeholders:\n\n" +
-               "1.  H1 (or #) content replaces {{Presentation Title}} or similarly-named placeholders.\n" +
-               "2.  H2 (or ##) content replaces {{Slide X Title}} or similarly-named placeholders.\n" +
-               "3.  H3 (or ###) content replaces {{Slide X Subtitle}} or similarly-named placeholders.\n" +
-               "4.  Normal text content replaces {{Slide X Body Content}} or similarly-named placeholders.\n" +
-               "5.  Dates formatted as 'MMM-YY' should replace {{MMM-YY}} or similarly-named placeholders.\n" +
-               "6.  Standard markdown footnotes should be rendered as native Gamma footnotes.\n\n" +
-               "Here is the content:\n\n---\n\n" +
-               markdownContent;
+  var prompt = section.content;
 
   var footerSettings = getSettingsFromFooter();
   if (footerSettings.generationPrompt) {
