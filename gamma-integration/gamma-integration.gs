@@ -4,6 +4,7 @@ function onOpen() {
   DocumentApp.getUi()
       .createMenu('Send to Gamma')
       .addItem('Create Presentation', 'showGammaDialog')
+      .addItem('Update Presentation', 'updatePresentation')
       .addSeparator()
       .addItem('Set API Key', 'showApiKeyDialog')
       .addItem('Add/Manage Templates', 'showAddTemplateDialog')
@@ -268,7 +269,9 @@ function processForm(dialogSettings) {
       attempts: 0
     };
 
-    PropertiesService.getUserProperties().setProperty('gammaJob_' + triggerUid, JSON.stringify(jobData));
+    var userProperties = PropertiesService.getUserProperties();
+    userProperties.setProperty('gammaJob_' + triggerUid, JSON.stringify(jobData));
+    userProperties.setProperty('gammaSettings_' + headingPath, JSON.stringify(finalSettings));
 
     DocumentApp.getUi().alert('Presentation started! The final link will be added below the section title in a few minutes.');
   } else {
@@ -506,12 +509,80 @@ function updateOrInsertLinks(headingElement, viewUrl, downloadUrl) {
   header.clear();
 
   var paragraph = header.appendParagraph('');
-  var viewText = paragraph.appendText('View Presentation');
+  var viewText = paragraph.appendText('View Gamma');
   viewText.setLinkUrl(viewUrl);
 
   if (downloadUrl) {
-    paragraph.appendText(' | ');
-    var downloadText = paragraph.appendText('Download');
+    paragraph.appendText('\t');
+    var downloadText = paragraph.appendText('Download Gamma');
     downloadText.setLinkUrl(downloadUrl);
+  }
+}
+
+function updatePresentation() {
+  // Clear the header first to remove old links
+  var header = DocumentApp.getActiveDocument().getHeader();
+  if (header) {
+    header.clear();
+  }
+
+  var section = getCurrentSectionContent();
+  if (!section) {
+    DocumentApp.getUi().alert('Could not determine the current section. Please place your cursor within a section defined by a "Heading 1".');
+    return;
+  }
+
+  var headingPath = getElementPath(section.headingElement);
+  var userProperties = PropertiesService.getUserProperties();
+  var savedSettings = userProperties.getProperty('gammaSettings_' + headingPath);
+
+  if (!savedSettings) {
+    DocumentApp.getUi().alert('No previous settings found for this section. Please create a new presentation first.');
+    return;
+  }
+
+  var finalSettings = JSON.parse(savedSettings);
+
+  var markdownContent = section.content;
+
+  // Construct the new instructional prompt
+  var prompt = "Please populate the Gamma template with the following content. Here are the rules for mapping the content to the placeholders:\n\n" +
+               "1.  H1 (or #) content replaces {{Presentation Title}} or similarly-named placeholders.\n" +
+               "2.  H2 (or ##) content replaces {{Slide X Title}} or similarly-named placeholders.\n" +
+               "3.  H3 (or ###) content replaces {{Slide X Subtitle}} or similarly-named placeholders.\n" +
+               "4.  Normal text content replaces {{Slide X Body Content}} or similarly-named placeholders.\n" +
+               "5.  Dates formatted as 'MMM-YY' should replace {{MMM-YY}} or similarly-named placeholders.\n" +
+               "6.  Gamma-formatted footnotes (^note^) should replace corresponding footnote placeholders.\n\n" +
+               "Here is the content:\n\n---\n\n" +
+               markdownContent;
+
+  var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
+  if (!apiKey) {
+    DocumentApp.getUi().alert('Please set your Gamma API key first.');
+    return;
+  }
+
+  var generationId = callGammaApi(apiKey, finalSettings.templateId, prompt, finalSettings);
+
+  if (generationId) {
+    var trigger = ScriptApp.newTrigger('checkGammaStatus')
+        .timeBased()
+        .everyMinutes(5)
+        .create();
+
+    var triggerUid = trigger.getUniqueId();
+
+    var jobData = {
+      generationId: generationId,
+      headingPath: headingPath,
+      triggerUid: triggerUid,
+      attempts: 0
+    };
+
+    userProperties.setProperty('gammaJob_' + triggerUid, JSON.stringify(jobData));
+
+    DocumentApp.getUi().alert('Presentation update started! The final link will be added below the section title in a few minutes.');
+  } else {
+    DocumentApp.getUi().alert('Failed to start Gamma presentation update.');
   }
 }

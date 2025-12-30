@@ -67,7 +67,6 @@
   <div class="form-group">
     <label for="themeId">Select Gamma Theme (Optional)</label>
     <select id="themeId">
-      <option value="">Default Theme</option>
       <? if (themes && themes.length > 0) { ?>
         <? for (var i = 0; i < themes.length; i++) { ?>
           <option value="<?= themes[i].id ?>"><?= themes[i].name ?></option>
