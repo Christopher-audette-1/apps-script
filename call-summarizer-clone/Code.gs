@@ -1,6 +1,6 @@
 // Main script file for the Call Summarizer
 
-var SOURCE_FOLDER_ID = '13VAjx0gWOLltuKWeLCy0Rh7hk7xG7uyx';
+var SOURCE_FOLDER_ID = '13VAjx_gWOLltuKWeLCy0Rh7hk7xG7uyx';
 var ROOT_FOLDER_ID_PROP = 'ROOT_FOLDER_ID';
 var LAST_RUN_PROP = 'LAST_RUN';
 
