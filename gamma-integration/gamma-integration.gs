@@ -1,3 +1,4 @@
+// Jules Session URL: https://app.jules.ai/s/2289490727387524931
 // The onOpen function runs automatically when the Google Doc is opened.
 function onOpen() {
   DocumentApp.getUi()
@@ -180,7 +181,11 @@ function processForm(dialogSettings) {
 
   var footerSettings = getSettingsFromFooter();
   var finalSettings = dialogSettings;
-  finalSettings.generationPrompt = footerSettings.generationPrompt || '';
+
+  var prompt = section.content;
+  if (footerSettings.generationPrompt) {
+    prompt = footerSettings.generationPrompt + '\n\n' + prompt;
+  }
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
   if (!apiKey) {
@@ -193,7 +198,7 @@ function processForm(dialogSettings) {
     return;
   }
 
-  var generationId = callGammaApi(apiKey, finalSettings.templateId, section.content, finalSettings);
+  var generationId = callGammaApi(apiKey, finalSettings.templateId, prompt, finalSettings);
 
   if (generationId) {
     var headingPath = getElementPath(section.headingElement);
@@ -224,81 +229,55 @@ function getCurrentSectionContent() {
   var doc = DocumentApp.getActiveDocument();
   var cursor = doc.getCursor();
 
-  if (!cursor) {
-    return null;
-  }
+  if (!cursor) { return null; }
 
   var cursorElement = cursor.getElement();
+
+  // Find the top-level element in the body
   while (cursorElement.getParent().getType() !== DocumentApp.ElementType.BODY_SECTION) {
     cursorElement = cursorElement.getParent();
   }
 
-  // Sibling traversal to build the element list
-  var allElements = [];
-  var firstElement = cursorElement;
-  while (firstElement.getPreviousSibling() != null) {
-    firstElement = firstElement.getPreviousSibling();
-  }
-  var currentElement = firstElement;
-  while (currentElement != null) {
-    allElements.push(currentElement);
-    currentElement = currentElement.getNextSibling();
-  }
-
-  // Find the index of the cursor element
-  var cursorIndex = -1;
-  for(var i = 0; i < allElements.length; i++) {
-    if (allElements[i].isAtDocumentEnd() === cursorElement.isAtDocumentEnd() &&
-        allElements[i].getAttributes() === cursorElement.getAttributes() &&
-        allElements[i].getText() === cursorElement.getText()) {
-      cursorIndex = i;
-      break;
-    }
-  }
-
-  if (cursorIndex === -1) {
-    // This is a fallback, but the above should work.
-    try {
-      var body = doc.getBody();
-      cursorIndex = body.getChildIndex(cursorElement);
-    } catch(e) {
-      DocumentApp.getUi().alert('Critical Error: Could not determine cursor position.');
-      return null;
-    }
-  }
-
-
-  var sectionStartIndex = -1;
+  // Find the start of the section (the preceding H1)
   var headingElement = null;
-  for (var i = cursorIndex; i >= 0; i--) {
-    var el = allElements[i];
-    if (el.getType() === DocumentApp.ElementType.PARAGRAPH && el.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
-      sectionStartIndex = i;
-      headingElement = el;
-      break;
+  var currentElement = cursorElement;
+  while(currentElement != null) {
+    if (currentElement.getType() === DocumentApp.ElementType.PARAGRAPH) {
+      if (currentElement.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
+        headingElement = currentElement;
+        break;
+      }
+    }
+    currentElement = currentElement.getPreviousSibling();
+  }
+
+  if (headingElement == null) {
+    // If no H1 is found before the cursor, check if the cursor is in an H1
+    if (cursorElement.getType() === DocumentApp.ElementType.PARAGRAPH && cursorElement.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
+      headingElement = cursorElement;
+    } else {
+      return null; // No section found
     }
   }
 
-  if (sectionStartIndex === -1) {
-    return null;
-  }
-
-  var sectionEndIndex = -1;
-  for (var i = sectionStartIndex + 1; i < allElements.length; i++) {
-    var el = allElements[i];
-    if (el.getType() === DocumentApp.ElementType.PARAGRAPH && el.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
-      sectionEndIndex = i;
-      break;
+  // Gather all elements in the section
+  var sectionElements = [headingElement];
+  currentElement = headingElement.getNextSibling();
+  while(currentElement != null) {
+    if (currentElement.getType() === DocumentApp.ElementType.PARAGRAPH) {
+       if (currentElement.asParagraph().getHeading() === DocumentApp.ParagraphHeading.HEADING1) {
+        break; // Reached the next section
+      }
     }
-  }
-  if (sectionEndIndex === -1) {
-    sectionEndIndex = allElements.length;
+    sectionElements.push(currentElement);
+    currentElement = currentElement.getNextSibling();
   }
 
   var output = [];
   var inList = false;
-  for (var i = sectionStartIndex; i < sectionEndIndex; i++) {
-    var element = allElements[i];
+
+  for (var i = 0; i < sectionElements.length; i++) {
+    var element = sectionElements[i];
     var type = element.getType();
 
     if (type === DocumentApp.ElementType.PARAGRAPH) {
@@ -314,27 +293,22 @@ function getCurrentSectionContent() {
           output.push('# ' + text);
           break;
         case DocumentApp.ParagraphHeading.HEADING2:
-          output.push('\n## ' + text);
-          break;
-        case DocumentApp.ParagraphHeading.SUBTITLE:
-          output.push('### ' + text);
-          break;
-        case DocumentApp.ParagraphHeading.HEADING4:
-          output.push('\n**Footer:** ' + text);
+          output.push('\n---\n'); // Explicit slide break
+          output.push('## ' + text);
           break;
         case DocumentApp.ParagraphHeading.NORMAL:
         default:
           output.push(text);
           break;
       }
-    } else if (type === DocumentApp.ElementType.HORIZONTAL_RULE) {
-      inList = false;
-      output.push('\n---\n');
     } else if (type === DocumentApp.ElementType.LIST_ITEM) {
       if (!inList) { output.push(''); inList = true; }
       var listItem = element.asListItem();
-      var prefix = ' '.repeat(listItem.getNestingLevel() * 2);
-      output.push(prefix + '* ' + listItem.getText());
+      var prefix = ' '.repeat(listItem.getNestingLevel() * 2) + '* ';
+      output.push(prefix + listItem.getText());
+    } else if (type === DocumentApp.ElementType.HORIZONTAL_RULE) {
+      inList = false;
+      output.push('\n---\n');
     }
   }
 
@@ -370,16 +344,26 @@ function callGammaApi(apiKey, templateId, content, settings) {
   // Base payload
   var payload = {
     gammaId: templateId,
-    prompt: content
+    prompt: content,
+    folderIds: ["945cxva32oyvqzr"]
   };
 
   // Add optional parameters
   if (settings.exportAs) payload.exportAs = settings.exportAs;
   if (settings.imageStyle) payload.imageOptions = { style: settings.imageStyle };
-  if (settings.workspaceAccess || settings.externalAccess) {
-    payload.sharingOptions = {};
-    if (settings.workspaceAccess) payload.sharingOptions.workspaceAccess = settings.workspaceAccess;
-    if (settings.externalAccess) payload.sharingOptions.externalAccess = settings.externalAccess;
+
+  payload.sharingOptions = {};
+  if (settings.workspaceAccess) payload.sharingOptions.workspaceAccess = settings.workspaceAccess;
+  if (settings.externalAccess) payload.sharingOptions.externalAccess = settings.externalAccess;
+
+  if (settings.shareWith) {
+    var emails = settings.shareWith.split(',').map(function(email) { return email.trim(); });
+    if (emails.length > 0) {
+      payload.sharingOptions.emailOptions = {
+        recipients: emails,
+        access: 'edit'
+      };
+    }
   }
 
   var options = {
@@ -406,43 +390,35 @@ function callGammaApi(apiKey, templateId, content, settings) {
 }
 
 function updateOrInsertLinks(headingElement, viewUrl, downloadUrl) {
-  var body = DocumentApp.getActiveDocument().getBody();
-  var headingIndex = body.getChildIndex(headingElement);
-  var linkParaIndex = headingIndex + 1;
+  var doc = DocumentApp.getActiveDocument();
 
-  // 1. Remove the old separate link paragraph if it exists
-  if (linkParaIndex < body.getNumChildren()) {
-    var nextElement = body.getChild(linkParaIndex);
-    var linkIdentifier = 'Gamma Links:';
-    if (nextElement && nextElement.getType() === DocumentApp.ElementType.PARAGRAPH && nextElement.asText().getText().startsWith(linkIdentifier)) {
-      body.removeChild(nextElement);
+  // 1. Clean up old links from the Heading 1 text
+  if (headingElement && headingElement.getType() === DocumentApp.ElementType.PARAGRAPH) {
+    var headingPara = headingElement.asParagraph();
+    var headingText = headingPara.getText();
+    var linkMarker = ' - View';
+    var markerIndex = headingText.indexOf(linkMarker);
+    if (markerIndex !== -1) {
+      headingPara.editAsText().deleteText(markerIndex, headingText.length - 1);
     }
   }
 
-  // 2. Work with the heading paragraph
-  if (headingElement.getType() !== DocumentApp.ElementType.PARAGRAPH) {
-    Logger.log('The provided heading element is not a Paragraph.');
-    return;
-  }
-  var headingPara = headingElement.asParagraph();
-  var headingText = headingPara.getText();
-
-  // 3. Remove any previously added links to make the operation idempotent
-  var linkMarker = ' - View';
-  var markerIndex = headingText.indexOf(linkMarker);
-  if (markerIndex !== -1) {
-    // This removes the text from the marker onwards.
-    headingPara.editAsText().deleteText(markerIndex, headingText.length - 1);
+  // 2. Update the document header with the new links
+  var header = doc.getHeader();
+  if (!header) {
+    header = doc.addHeader();
   }
 
-  // 4. Add the new hyperlinks
-  headingPara.appendText(' - ');
-  var viewText = headingPara.appendText('View');
+  // Clear existing header content
+  header.clear();
+
+  var paragraph = header.appendParagraph('');
+  var viewText = paragraph.appendText('View Presentation');
   viewText.setLinkUrl(viewUrl);
 
   if (downloadUrl) {
-    headingPara.appendText(' | ');
-    var downloadText = headingPara.appendText('Download');
+    paragraph.appendText(' | ');
+    var downloadText = paragraph.appendText('Download');
     downloadText.setLinkUrl(downloadUrl);
   }
 }
