@@ -52,7 +52,7 @@
 </head>
 <body>
   <div class="form-group">
-    <label for="templateId">Select Gamma Template</label>
+    <label for="templateId">Select Gamma Template (Required)</label>
     <select id="templateId">
       <? if (templates && templates.length > 0) { ?>
         <? for (var i = 0; i < templates.length; i++) { ?>
@@ -60,6 +60,18 @@
         <? } ?>
       <? } else { ?>
         <option value="" disabled selected>No templates added yet</option>
+      <? } ?>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="themeId">Select Gamma Theme (Optional)</label>
+    <select id="themeId">
+      <option value="">Default Theme</option>
+      <? if (themes && themes.length > 0) { ?>
+        <? for (var i = 0; i < themes.length; i++) { ?>
+          <option value="<?= themes[i].id ?>"><?= themes[i].name ?></option>
+        <? } ?>
       <? } ?>
     </select>
   </div>
@@ -138,6 +150,7 @@
 
       var settings = {
         templateId: templateId,
+        themeId: document.getElementById('themeId').value,
         imageStyle: document.getElementById('imageStyle').value,
         exportAs: document.getElementById('exportAs').value,
         workspaceAccess: document.getElementById('workspaceAccess').value,

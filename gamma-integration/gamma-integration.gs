@@ -7,6 +7,7 @@ function onOpen() {
       .addSeparator()
       .addItem('Set API Key', 'showApiKeyDialog')
       .addItem('Add/Manage Templates', 'showAddTemplateDialog')
+      .addItem('Add/Manage Themes', 'showAddThemeDialog')
       .addToUi();
 }
 
@@ -87,7 +88,8 @@ function checkGammaStatus(e) {
     if (jsonResponse.status === 'completed' && jsonResponse.gammaUrl) {
       var headingElement = findElementByPath(jobData.headingPath);
       if (headingElement) {
-        updateOrInsertLinks(headingElement, jsonResponse.gammaUrl, jsonResponse.exportUrl || null);
+        var downloadUrl = (jsonResponse.exports && jsonResponse.exports.pdf) ? jsonResponse.exports.pdf : null;
+        updateOrInsertLinks(headingElement, jsonResponse.gammaUrl, downloadUrl);
         Logger.log('Successfully inserted links for generation ID: ' + jobData.generationId);
       } else {
         Logger.log('Could not find heading element to insert links for generation ID: ' + jobData.generationId);
@@ -163,8 +165,44 @@ function removeTemplate(id) {
   PropertiesService.getScriptProperties().setProperty('GAMMA_TEMPLATES', JSON.stringify(updatedTemplates));
 }
 
+function showAddThemeDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('AddThemeDialog')
+      .setWidth(400)
+      .setHeight(400);
+  DocumentApp.getUi().showModalDialog(html, 'Manage Gamma Themes');
+}
+
+// Gets the list of saved themes
+function getThemes() {
+  var properties = PropertiesService.getScriptProperties();
+  var themesJson = properties.getProperty('GAMMA_THEMES');
+  return themesJson ? JSON.parse(themesJson) : [];
+}
+
+// Saves a new theme to the list
+function saveTheme(name, id) {
+  var themes = getThemes();
+  var existingIndex = themes.findIndex(t => t.id === id);
+  if (existingIndex > -1) {
+    themes[existingIndex].name = name;
+  } else {
+    themes.push({ name: name, id: id });
+  }
+  PropertiesService.getScriptProperties().setProperty('GAMMA_THEMES', JSON.stringify(themes));
+}
+
+// Removes a theme from the list by its ID
+function removeTheme(id) {
+  var themes = getThemes();
+  var updatedThemes = themes.filter(function(theme) {
+    return theme.id !== id;
+  });
+  PropertiesService.getScriptProperties().setProperty('GAMMA_THEMES', JSON.stringify(updatedThemes));
+}
+
 function showGammaDialog() {
   var template = HtmlService.createTemplateFromFile('GammaDialog');
+  template.themes = getThemes();
   template.templates = getTemplates();
   var html = template.evaluate()
       .setWidth(450)
@@ -183,8 +221,9 @@ function processForm(dialogSettings) {
   var finalSettings = dialogSettings;
 
   var prompt = section.content;
+
   if (footerSettings.generationPrompt) {
-    prompt = footerSettings.generationPrompt + '\n\n' + prompt;
+    prompt += '\n\n[CONSTRAINTS]\n' + footerSettings.generationPrompt;
   }
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
@@ -296,6 +335,13 @@ function getCurrentSectionContent() {
           output.push('\n---\n'); // Explicit slide break
           output.push('## ' + text);
           break;
+        case DocumentApp.ParagraphHeading.HEADING3:
+        case DocumentApp.ParagraphHeading.SUBTITLE:
+          output.push('### ' + text);
+          break;
+        case DocumentApp.ParagraphHeading.HEADING4:
+          // This is now handled by the footnote logic below
+          break;
         case DocumentApp.ParagraphHeading.NORMAL:
         default:
           output.push(text);
@@ -312,8 +358,38 @@ function getCurrentSectionContent() {
     }
   }
 
+  var content = output.join('\n');
+  var slides = content.split('\n---\n');
+  var processedSlides = [];
+
+  for (var j = 0; j < slides.length; j++) {
+    var slideContent = slides[j];
+    var footnotes = [];
+    var footnoteRefRegex = /\[\^(\d+)\](?!:)/g;
+    var footnoteDefRegex = /\[\^(\d+)\]:\s*(.*)/g;
+    var refs = slideContent.match(footnoteRefRegex) || [];
+
+    if (refs.length > 0) {
+      var defs = content.match(footnoteDefRegex) || [];
+      for (var k = 0; k < refs.length; k++) {
+        var refNum = refs[k].match(/\d+/)[0];
+        for (var l = 0; l < defs.length; l++) {
+          if (defs[l].startsWith('[^' + refNum + ']:')) {
+            footnotes.push(defs[l]);
+          }
+        }
+      }
+    }
+
+    slideContent = slideContent.replace(footnoteDefRegex, '');
+    if (footnotes.length > 0) {
+      slideContent += '\n\n' + footnotes.join('\n');
+    }
+    processedSlides.push(slideContent);
+  }
+
   return {
-    content: output.join('\n'),
+    content: processedSlides.join('\n---\n'),
     headingElement: headingElement
   };
 }
@@ -337,7 +413,7 @@ function callGammaApi(apiKey, templateId, content, settings) {
   var generationUrl = 'https://public-api.gamma.app/v1.0/generations/from-template';
 
   if (!templateId) {
-    DocumentApp.getUi().alert('Please set your Gamma Template ID first.');
+    DocumentApp.getUi().alert('Please select a Gamma Template first.');
     return null;
   }
 
@@ -347,6 +423,11 @@ function callGammaApi(apiKey, templateId, content, settings) {
     prompt: content,
     folderIds: ["945cxva32oyvqzr"]
   };
+
+  // Add optional themeId if provided
+  if (settings.themeId) {
+    payload.themeId = settings.themeId;
+  }
 
   // Add optional parameters
   if (settings.exportAs) payload.exportAs = settings.exportAs;
