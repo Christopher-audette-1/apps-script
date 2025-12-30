@@ -220,7 +220,19 @@ function processForm(dialogSettings) {
   var footerSettings = getSettingsFromFooter();
   var finalSettings = dialogSettings;
 
-  var prompt = section.content;
+  var markdownContent = section.content;
+
+  // Construct the new instructional prompt
+  var prompt = "Please populate the Gamma template with the following content. Here are the rules for mapping the content to the placeholders:\n\n" +
+               "1.  H1 (or #) content replaces {{Presentation Title}} or similarly-named placeholders.\n" +
+               "2.  H2 (or ##) content replaces {{Slide X Title}} or similarly-named placeholders.\n" +
+               "3.  H3 (or ###) content replaces {{Slide X Subtitle}} or similarly-named placeholders.\n" +
+               "4.  Normal text content replaces {{Slide X Body Content}} or similarly-named placeholders.\n" +
+               "5.  Dates formatted as 'MMM-YY' should replace {{MMM-YY}} or similarly-named placeholders.\n" +
+               "6.  Gamma-formatted footnotes (^note^) should replace corresponding footnote placeholders.\n\n" +
+               "Here is the content:\n\n---\n\n" +
+               markdownContent;
+
 
   if (footerSettings.generationPrompt) {
     prompt += '\n\n[CONSTRAINTS]\n' + footerSettings.generationPrompt;
@@ -359,37 +371,37 @@ function getCurrentSectionContent() {
   }
 
   var content = output.join('\n');
-  var slides = content.split('\n---\n');
-  var processedSlides = [];
 
-  for (var j = 0; j < slides.length; j++) {
-    var slideContent = slides[j];
-    var footnotes = [];
-    var footnoteRefRegex = /\[\^(\d+)\](?!:)/g;
-    var footnoteDefRegex = /\[\^(\d+)\]:\s*(.*)/g;
-    var refs = slideContent.match(footnoteRefRegex) || [];
-
-    if (refs.length > 0) {
-      var defs = content.match(footnoteDefRegex) || [];
-      for (var k = 0; k < refs.length; k++) {
-        var refNum = refs[k].match(/\d+/)[0];
-        for (var l = 0; l < defs.length; l++) {
-          if (defs[l].startsWith('[^' + refNum + ']:')) {
-            footnotes.push(defs[l]);
-          }
-        }
-      }
+  // Date parsing logic
+  var dateRegex = /^(#.*?\n)([A-Za-z]{3,}\s\d{1,2},\s\d{4})/m;
+  var dateMatch = content.match(dateRegex);
+  if (dateMatch) {
+    var parsedDate = new Date(dateMatch[2]);
+    if (!isNaN(parsedDate.getTime())) {
+      var month = parsedDate.toLocaleString('default', { month: 'short' });
+      var year = parsedDate.getFullYear().toString().slice(-2);
+      var formattedDate = month.toUpperCase() + '-' + year;
+      // Replace original date with formatted date
+      content = content.replace(dateMatch[2], formattedDate);
     }
-
-    slideContent = slideContent.replace(footnoteDefRegex, '');
-    if (footnotes.length > 0) {
-      slideContent += '\n\n' + footnotes.join('\n');
-    }
-    processedSlides.push(slideContent);
   }
 
+  // Footnote conversion to Gamma format
+  var footnoteDefRegex = /\[\^(\d+)\]:\s*(.*)/g;
+  var footnoteDefs = {};
+  var defMatch;
+  while ((defMatch = footnoteDefRegex.exec(content)) !== null) {
+    footnoteDefs[defMatch[1]] = defMatch[2].trim();
+  }
+
+  content = content.replace(footnoteDefRegex, ''); // Remove definitions
+
+  content = content.replace(/\[\^(\d+)\](?!:)/g, function(match, p1) {
+    return footnoteDefs[p1] ? '^' + footnoteDefs[p1] + '^' : match;
+  });
+
   return {
-    content: processedSlides.join('\n---\n'),
+    content: content,
     headingElement: headingElement
   };
 }
