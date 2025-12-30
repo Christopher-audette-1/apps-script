@@ -1,4 +1,4 @@
-// Jules Session URL: https://app.jules.ai/s/2289490727387524931
+// Jules Session URL: https://app.jles.ai/s/2289490727387524931
 // The onOpen function runs automatically when the Google Doc is opened.
 function onOpen() {
   DocumentApp.getUi()
@@ -7,6 +7,7 @@ function onOpen() {
       .addItem('Update Presentation', 'updatePresentation')
       .addSeparator()
       .addItem('Set API Key', 'showApiKeyDialog')
+      .addItem('Set Default Folder', 'showSetFolderDialog')
       .addItem('Add/Manage Templates', 'showAddTemplateDialog')
       .addItem('Add/Manage Themes', 'showAddThemeDialog')
       .addToUi();
@@ -130,6 +131,21 @@ function saveApiKey(apiKey) {
   PropertiesService.getScriptProperties().setProperty('GAMMA_API_KEY', apiKey);
 }
 
+function showSetFolderDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('SetFolderDialog')
+      .setWidth(300)
+      .setHeight(150);
+  DocumentApp.getUi().showModalDialog(html, 'Set Default Gamma Folder');
+}
+
+function saveFolderId(folderId) {
+  PropertiesService.getScriptProperties().setProperty('GAMMA_FOLDER_ID', folderId);
+}
+
+function getFolderId() {
+  return PropertiesService.getScriptProperties().getProperty('GAMMA_FOLDER_ID');
+}
+
 function showAddTemplateDialog() {
   var html = HtmlService.createHtmlOutputFromFile('AddTemplateDialog')
       .setWidth(400)
@@ -212,71 +228,13 @@ function showGammaDialog() {
 }
 
 function processForm(dialogSettings) {
-  var section = getCurrentSectionContent();
-  if (!section) {
-    DocumentApp.getUi().alert('Could not determine the current section. Please place your cursor within a section defined by a "Heading 1".');
-    return;
-  }
-
-  var footerSettings = getSettingsFromFooter();
-  var finalSettings = dialogSettings;
-
-  var markdownContent = section.content;
-
-  // Construct the new instructional prompt
-  var prompt = "Please populate the Gamma template with the following content. Here are the rules for mapping the content to the placeholders:\n\n" +
-               "1.  H1 (or #) content replaces {{Presentation Title}} or similarly-named placeholders.\n" +
-               "2.  H2 (or ##) content replaces {{Slide X Title}} or similarly-named placeholders.\n" +
-               "3.  H3 (or ###) content replaces {{Slide X Subtitle}} or similarly-named placeholders.\n" +
-               "4.  Normal text content replaces {{Slide X Body Content}} or similarly-named placeholders.\n" +
-               "5.  Dates formatted as 'MMM-YY' should replace {{MMM-YY}} or similarly-named placeholders.\n" +
-               "6.  Gamma-formatted footnotes (^note^) should replace corresponding footnote placeholders.\n\n" +
-               "Here is the content:\n\n---\n\n" +
-               markdownContent;
-
-
-  if (footerSettings.generationPrompt) {
-    prompt += '\n\n[CONSTRAINTS]\n' + footerSettings.generationPrompt;
-  }
-
-  var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
-  if (!apiKey) {
-    DocumentApp.getUi().alert('Please set your Gamma API key first.');
-    return;
-  }
-
-  if (!finalSettings.templateId) {
-    DocumentApp.getUi().alert('Please select a template.');
-    return;
-  }
-
-  var generationId = callGammaApi(apiKey, finalSettings.templateId, prompt, finalSettings);
-
-  if (generationId) {
-    var headingPath = getElementPath(section.headingElement);
-
-    var trigger = ScriptApp.newTrigger('checkGammaStatus')
-        .timeBased()
-        .everyMinutes(5)
-        .create();
-
-    var triggerUid = trigger.getUniqueId();
-
-    var jobData = {
-      generationId: generationId,
-      headingPath: headingPath,
-      triggerUid: triggerUid,
-      attempts: 0
-    };
-
+  var headingPath = startGeneration(dialogSettings);
+  if (headingPath) {
     var userProperties = PropertiesService.getUserProperties();
-    userProperties.setProperty('gammaJob_' + triggerUid, JSON.stringify(jobData));
-    userProperties.setProperty('gammaSettings_' + headingPath, JSON.stringify(finalSettings));
-
+    userProperties.setProperty('gammaSettings_' + headingPath, JSON.stringify(dialogSettings));
     DocumentApp.getUi().alert('Presentation started! The final link will be added below the section title in a few minutes.');
-  } else {
-    DocumentApp.getUi().alert('Failed to start Gamma presentation generation.');
   }
+  // No else needed, error is handled in startGeneration/callGammaApi
 }
 
 function getCurrentSectionContent() {
@@ -389,22 +347,37 @@ function getCurrentSectionContent() {
     }
   }
 
-  // Footnote conversion to Gamma format
-  var footnoteDefRegex = /\[\^(\d+)\]:\s*(.*)/g;
-  var footnoteDefs = {};
-  var defMatch;
-  while ((defMatch = footnoteDefRegex.exec(content)) !== null) {
-    footnoteDefs[defMatch[1]] = defMatch[2].trim();
+  var slides = content.split('\n---\n');
+  var processedSlides = [];
+
+  for (var j = 0; j < slides.length; j++) {
+    var slideContent = slides[j];
+    var footnotes = [];
+    var footnoteRefRegex = /\[\^(\d+)\](?!:)/g;
+    var footnoteDefRegex = /\[\^(\d+)\]:\s*(.*)/g;
+    var refs = slideContent.match(footnoteRefRegex) || [];
+
+    if (refs.length > 0) {
+      var defs = content.match(footnoteDefRegex) || [];
+      for (var k = 0; k < refs.length; k++) {
+        var refNum = refs[k].match(/\d+/)[0];
+        for (var l = 0; l < defs.length; l++) {
+          if (defs[l].startsWith('[^' + refNum + ']:')) {
+            footnotes.push(defs[l]);
+          }
+        }
+      }
+    }
+
+    slideContent = slideContent.replace(footnoteDefRegex, '');
+    if (footnotes.length > 0) {
+      slideContent += '\n\n' + footnotes.join('\n');
+    }
+    processedSlides.push(slideContent);
   }
 
-  content = content.replace(footnoteDefRegex, ''); // Remove definitions
-
-  content = content.replace(/\[\^(\d+)\](?!:)/g, function(match, p1) {
-    return footnoteDefs[p1] ? '^' + footnoteDefs[p1] + '^' : match;
-  });
-
   return {
-    content: content,
+    content: processedSlides.join('\n---\n'),
     headingElement: headingElement
   };
 }
@@ -432,11 +405,13 @@ function callGammaApi(apiKey, templateId, content, settings) {
     return null;
   }
 
+  var folderId = getFolderId() || "945cxva32oyvqzr";
+
   // Base payload
   var payload = {
     gammaId: templateId,
     prompt: content,
-    folderIds: ["945cxva32oyvqzr"]
+    folderIds: [folderId]
   };
 
   // Add optional themeId if provided
@@ -446,7 +421,12 @@ function callGammaApi(apiKey, templateId, content, settings) {
 
   // Add optional parameters
   if (settings.exportAs) payload.exportAs = settings.exportAs;
-  if (settings.imageStyle) payload.imageOptions = { style: settings.imageStyle };
+  if (settings.imageStyle) {
+    payload.imageOptions = {
+      source: 'ai',
+      model: settings.imageStyle
+    };
+  }
 
   payload.sharingOptions = {};
   if (settings.workspaceAccess) payload.sharingOptions.workspaceAccess = settings.workspaceAccess;
@@ -471,16 +451,24 @@ function callGammaApi(apiKey, templateId, content, settings) {
 
   try {
     var response = UrlFetchApp.fetch(generationUrl, options);
-    var jsonResponse = JSON.parse(response.getContentText());
+    var responseCode = response.getResponseCode();
+    var responseBody = response.getContentText();
+    var jsonResponse = JSON.parse(responseBody);
 
-    if (jsonResponse.generationId) {
+    if (responseCode === 200 && jsonResponse.generationId) {
       return jsonResponse.generationId;
     } else {
-      Logger.log('Failed to initiate generation: ' + response.getContentText());
+      var errorMessage = "Failed to start Gamma presentation generation.";
+      if (jsonResponse && jsonResponse.error) {
+        errorMessage += " Error: " + jsonResponse.error;
+      }
+      Logger.log(errorMessage + ' Full response: ' + responseBody);
+      DocumentApp.getUi().alert(errorMessage);
       return null;
     }
   } catch (e) {
     Logger.log('Error calling Gamma API: ' + e.toString());
+    DocumentApp.getUi().alert('An unexpected error occurred while calling the Gamma API. Please check the logs for more details.');
     return null;
   }
 }
@@ -526,7 +514,7 @@ function updatePresentation() {
     header.clear();
   }
 
-  var section = getCurrentSectionContent();
+  var section = getCurrentSectionContent(); // We need to get the section to find the path
   if (!section) {
     DocumentApp.getUi().alert('Could not determine the current section. Please place your cursor within a section defined by a "Heading 1".');
     return;
@@ -543,6 +531,19 @@ function updatePresentation() {
 
   var finalSettings = JSON.parse(savedSettings);
 
+  if (startGeneration(finalSettings)) {
+    DocumentApp.getUi().alert('Presentation update started! The final link will be added below the section title in a few minutes.');
+  }
+  // No else needed, error is handled in startGeneration/callGammaApi
+}
+
+function startGeneration(settings) {
+  var section = getCurrentSectionContent();
+  if (!section) {
+    DocumentApp.getUi().alert('Could not determine the current section. Please place your cursor within a section defined by a "Heading 1".');
+    return;
+  }
+
   var markdownContent = section.content;
 
   // Construct the new instructional prompt
@@ -552,9 +553,14 @@ function updatePresentation() {
                "3.  H3 (or ###) content replaces {{Slide X Subtitle}} or similarly-named placeholders.\n" +
                "4.  Normal text content replaces {{Slide X Body Content}} or similarly-named placeholders.\n" +
                "5.  Dates formatted as 'MMM-YY' should replace {{MMM-YY}} or similarly-named placeholders.\n" +
-               "6.  Gamma-formatted footnotes (^note^) should replace corresponding footnote placeholders.\n\n" +
+               "6.  Standard markdown footnotes should be rendered as native Gamma footnotes.\n\n" +
                "Here is the content:\n\n---\n\n" +
                markdownContent;
+
+  var footerSettings = getSettingsFromFooter();
+  if (footerSettings.generationPrompt) {
+    prompt += '\n\n[CONSTRAINTS]\n' + footerSettings.generationPrompt;
+  }
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('GAMMA_API_KEY');
   if (!apiKey) {
@@ -562,9 +568,16 @@ function updatePresentation() {
     return;
   }
 
-  var generationId = callGammaApi(apiKey, finalSettings.templateId, prompt, finalSettings);
+  if (!settings.templateId) {
+    DocumentApp.getUi().alert('Please select a template.');
+    return;
+  }
+
+  var generationId = callGammaApi(apiKey, settings.templateId, prompt, settings);
 
   if (generationId) {
+    var headingPath = getElementPath(section.headingElement);
+
     var trigger = ScriptApp.newTrigger('checkGammaStatus')
         .timeBased()
         .everyMinutes(5)
@@ -579,10 +592,11 @@ function updatePresentation() {
       attempts: 0
     };
 
+    var userProperties = PropertiesService.getUserProperties();
     userProperties.setProperty('gammaJob_' + triggerUid, JSON.stringify(jobData));
 
-    DocumentApp.getUi().alert('Presentation update started! The final link will be added below the section title in a few minutes.');
-  } else {
-    DocumentApp.getUi().alert('Failed to start Gamma presentation update.');
+    return headingPath;
   }
+
+  return null;
 }

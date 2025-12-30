@@ -6,7 +6,7 @@ This document outlines the best practices for formatting your Google Doc present
 
 -   **Title:** The title of your presentation should be formatted as a `Heading 1`.
 -   **Slide Titles:** Each new slide should begin with a `Heading 2`.
--   **Subtitles:** Subtitles within a slide should be formatted as `Subtitle` (which will be converted to a `###` markdown heading).
+-   **Subtitles:** Subtitles within a slide should be formatted as `Heading 3` or `Subtitle` (which will be converted to a `###` markdown heading).
 -   **Slide Breaks:** A horizontal rule (`---`) will also create a new slide.
 
 ## Content Formatting
