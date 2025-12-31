@@ -10,7 +10,7 @@ var LAST_PROCESSED_TIMESTAMP_PROP = 'LAST_PROCESSED_TIMESTAMP';
 // --- Configuration Functions (to be run manually by the user) ---
 
 function DO_THIS_ONCE_setApiKey() {
-  var apiKey = 'AIzaSyBoeIcPZ9TEtywE9xWkIURJSm0XRZ3AvD8';
+  var apiKey = 'AIzaSyDy8VU36iaXLhImZhUMLVZknvQk5pi31O4';
   PropertiesService.getScriptProperties().setProperty(GEMINI_API_KEY_PROP, apiKey);
   Logger.log('SUCCESS: Gemini API Key has been set.');
 }
