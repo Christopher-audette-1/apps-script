@@ -277,12 +277,40 @@ function buildTranscript_(transcriptData, users, externalParticipants) {
     var name = participant.email ? participant.email.split('@')[0] : 'External Participant';
     speakerMap[participant.personId] = name;
   });
-  var transcript = '';
-  (transcriptData || []).forEach(function(line) {
-    var speaker = speakerMap[line.personId] || 'Unknown Speaker';
-    transcript += speaker + ': ' + line.text + '\n';
+
+  if (!transcriptData || transcriptData.length === 0) {
+    return '';
+  }
+
+  var dialogueBlocks = [];
+  var currentSpeakerId = null;
+  var currentLines = [];
+
+  transcriptData.forEach(function(line) {
+    if (line.personId !== currentSpeakerId) {
+      // Speaker has changed, or it's the first line.
+      // First, save the previous block of dialogue.
+      if (currentSpeakerId !== null) {
+        var speakerName = speakerMap[currentSpeakerId] || 'Unknown Speaker';
+        dialogueBlocks.push(speakerName + ':\n' + currentLines.join('\n'));
+      }
+
+      // Reset for the new speaker.
+      currentSpeakerId = line.personId;
+      currentLines = [line.text];
+    } else {
+      // Same speaker, just add their line.
+      currentLines.push(line.text);
+    }
   });
-  return transcript;
+
+  // Add the very last block of dialogue.
+  if (currentSpeakerId !== null) {
+    var speakerName = speakerMap[currentSpeakerId] || 'Unknown Speaker';
+    dialogueBlocks.push(speakerName + ':\n' + currentLines.join('\n'));
+  }
+
+  return dialogueBlocks.join('\n\n');
 }
 
 function getOrCreateCustomerFolder_(rootFolder, customerName) {
