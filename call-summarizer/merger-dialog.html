@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+  </head>
+  <body>
+    <div class="container">
+      <h2>Select Folders to Merge</h2>
+      <form id="mergeForm">
+        <div id="checklist">
+          <? for (var i = 0; i < suggestions.length; i++) { ?>
+          <p>
+            <input type="checkbox" id="merge_<?= i ?>" name="merge_<?= i ?>" value="<?= JSON.stringify(suggestions[i]) ?>">
+            <label for="merge_<?= i ?>" style="margin-left: 5px;">Merge "<?= suggestions[i].source ?>" into "<?= suggestions[i].destination ?>"</label>
+          </p>
+        <? } ?>
+        </div>
+        <br>
+        <button type="submit" class="action">Merge Selected</button>
+        <button type="button" onclick="google.script.host.close()">Cancel</button>
+      </form>
+    </div>
+
+    <script>
+      document.getElementById('mergeForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var selectedMerges = [];
+        var checkboxes = document.querySelectorAll('input[type="checkbox"]:checked');
+        checkboxes.forEach(function(checkbox) {
+          selectedMerges.push(JSON.parse(checkbox.value));
+        });
+
+        if (selectedMerges.length > 0) {
+          google.script.run
+            .withSuccessHandler(function() {
+              google.script.host.close();
+            })
+            .withFailureHandler(function(err) {
+              alert('Error: ' + err.message);
+              google.script.host.close();
+            })
+            .batchMergeFolders(selectedMerges);
+        } else {
+          google.script.host.close();
+        }
+      });
+    </script>
+  </body>
+</html>

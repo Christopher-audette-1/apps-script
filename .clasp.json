@@ -1,7 +1,6 @@
 {
-  "scriptId": "1UMbp6EbRtMFkwGlbSyvx6q678U-IoxF-NRUVJ5iyp0rZ9qT4D_LqsUjy",
-  "rootDir": "receipt-forwarder",
-  "projectId": "gen-lang-client-0404130274",
+  "scriptId": "1_bGifPk9-oGZJSsbj5ZMkAQV96KNKOdWBkUcmJd4vEVj9XlK_6p3cdvA",
+  "rootDir": "call-summarizer",
   "scriptExtensions": [
     ".js",
     ".gs"
@@ -12,5 +11,6 @@
   "jsonExtensions": [
     ".json"
   ],
-  "filePushOrder": []
+  "filePushOrder": [],
+  "skipSubdirectories": false
 }

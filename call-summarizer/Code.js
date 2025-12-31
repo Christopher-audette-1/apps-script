@@ -147,14 +147,20 @@ function createSummaryDocument_(file, data) {
 
 // --- Folder Merging Functions ---
 
-function findAndSuggestFolderMerges() {
+function onOpen() {
+  SpreadsheetApp.getUi()
+      .createMenu('Call Summarizer')
+      .addItem('Merge Folders', 'showMergeDialog')
+      .addToUi();
+}
+
+function showMergeDialog() {
   var rootFolder = DriveApp.getFolderById(getRequiredProperty_(ROOT_FOLDER_ID_PROP));
   var folders = rootFolder.getFolders();
   var folderList = [];
   while(folders.hasNext()) folderList.push(folders.next());
 
-  Logger.log('Checking for similar folders... (Threshold > 0.8)');
-  var suggestionsFound = false;
+  var suggestions = [];
   for (var i = 0; i < folderList.length; i++) {
     for (var j = i + 1; j < folderList.length; j++) {
       var folder1 = folderList[i];
@@ -163,14 +169,38 @@ function findAndSuggestFolderMerges() {
       var similarity = jaroWinklerSimilarity_(folder1.getName().toLowerCase(), folder2.getName().toLowerCase());
       
       if (similarity > 0.8) {
-        suggestionsFound = true;
-        Logger.log('---\nPotential duplicate found:\n  Folder A: "' + folder1.getName() + '"\n  Folder B: "' + folder2.getName() + '"\nTo merge B into A, run:\nmergeFolders("' + folder2.getName() + '", "' + folder1.getName() + '")\n---');
+        suggestions.push({
+          source: folder2.getName(),
+          destination: folder1.getName()
+        });
       }
     }
   }
   
-  if (!suggestionsFound) Logger.log('No similar folders found.');
-  Logger.log('Folder check complete.');
+  if (suggestions.length === 0) {
+    SpreadsheetApp.getUi().alert('No folder merge suggestions found.');
+    return;
+  }
+
+  var template = HtmlService.createTemplateFromFile('merger-dialog');
+  template.suggestions = suggestions;
+  var html = template.evaluate().setWidth(400).setHeight(300);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Merge Folders');
+}
+
+function batchMergeFolders(merges) {
+  if (!merges || merges.length === 0) {
+    Logger.log('No merges to process.');
+    return;
+  }
+
+  merges.forEach(function(merge) {
+    try {
+      mergeFolders(merge.source, merge.destination);
+    } catch (e) {
+      Logger.log('Failed to merge folder "' + merge.source + '" into "' + merge.destination + '": ' + e.message);
+    }
+  });
 }
 
 function mergeFolders(sourceFolderName, destinationFolderName) {
@@ -179,20 +209,17 @@ function mergeFolders(sourceFolderName, destinationFolderName) {
   var destFolders = rootFolder.getFoldersByName(destinationFolderName);
 
   if (!sourceFolders.hasNext()) {
-    Logger.log('Error: Could not find source folder "' + sourceFolderName + '".');
-    return;
+    throw new Error('Could not find source folder "' + sourceFolderName + '".');
   }
   if (!destFolders.hasNext()) {
-    Logger.log('Error: Could not find destination folder "' + destinationFolderName + '".');
-    return;
+    throw new Error('Could not find destination folder "' + destinationFolderName + '".');
   }
 
   var sourceFolder = sourceFolders.next();
   var destFolder = destFolders.next();
 
   if (sourceFolder.getId() === destFolder.getId()) {
-    Logger.log('Error: Source and destination are the same.');
-    return;
+    throw new Error('Source and destination are the same.');
   }
 
   var files = sourceFolder.getFiles();
