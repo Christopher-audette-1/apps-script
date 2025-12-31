@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    <div class="block">
+      <label for="gamma-template">Gamma Template:</label>
+      <input type="text" id="gamma-template" name="gamma-template" style="width: 100%;">
+    </div>
+    <div class="block" style="margin-top: 10px;">
+      <button onclick="sendToGamma()">Send</button>
+      <button onclick="google.script.host.close()">Cancel</button>
+    </div>
+
+    <script>
+      function sendToGamma() {
+        var gammaTemplate = document.getElementById('gamma-template').value;
+        if (gammaTemplate) {
+          google.script.run
+            .withSuccessHandler(function() {
+              google.script.host.close();
+            })
+            .withFailureHandler(function(error) {
+              alert(error);
+              google.script.host.close();
+            })
+            .sendToGamma(gammaTemplate);
+        } else {
+          alert('Please enter a Gamma Template.');
+        }
+      }
+    </script>
+  </body>
+</html>
