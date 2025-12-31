@@ -147,12 +147,7 @@ function createSummaryDocument_(file, data) {
 
 // --- Folder Merging Functions ---
 
-function onOpen() {
-  SpreadsheetApp.getUi()
-      .createMenu('Call Summarizer')
-      .addItem('Merge Folders', 'showMergeDialog')
-      .addToUi();
-}
+
 
 function showMergeDialog() {
   var rootFolder = DriveApp.getFolderById(getRequiredProperty_(ROOT_FOLDER_ID_PROP));
