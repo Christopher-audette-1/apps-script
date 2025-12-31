@@ -10,9 +10,25 @@ var LAST_PROCESSED_TIMESTAMP_PROP = 'LAST_PROCESSED_TIMESTAMP';
 // --- Configuration Functions (to be run manually by the user) ---
 
 function DO_THIS_ONCE_setApiKey() {
-  var apiKey = 'AIzaSyBoeIcPZ9TEtywE9xWkIURJSm0XRZ3AvD8';
-  PropertiesService.getScriptProperties().setProperty(GEMINI_API_KEY_PROP, apiKey);
-  Logger.log('SUCCESS: Gemini API Key has been set.');
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt(
+    'Set Gemini API Key',
+    'Please enter your Gemini API key:',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() == ui.Button.OK) {
+    var apiKey = response.getResponseText();
+    if (apiKey && apiKey.trim() !== '') {
+      PropertiesService.getScriptProperties().setProperty(GEMINI_API_KEY_PROP, apiKey);
+      ui.alert('SUCCESS: Gemini API Key has been set.');
+      Logger.log('SUCCESS: Gemini API Key has been set.');
+    } else {
+      ui.alert('Operation cancelled. No API key was provided.');
+    }
+  } else {
+    ui.alert('Operation cancelled.');
+  }
 }
 
 function DO_THIS_ONCE_setRootFolder() {
