@@ -4,6 +4,8 @@
 var SOURCE_FOLDER_ID = '13VAjx0gWOLltuKWeLCy0Rh7hk7xG7uyx';
 var ROOT_FOLDER_ID_PROP = 'ROOT_FOLDER_ID';
 var GEMINI_API_KEY_PROP = 'GEMINI_API_KEY';
+var LAST_PROCESSED_TIMESTAMP_PROP = 'LAST_PROCESSED_TIMESTAMP';
+
 
 // --- Configuration Functions (to be run manually by the user) ---
 
@@ -19,53 +21,73 @@ function DO_THIS_ONCE_setRootFolder() {
   Logger.log('SUCCESS: Root Folder ID has been set to: ' + folderId);
 }
 
+function resetLastProcessedTimestamp() {
+  PropertiesService.getScriptProperties().deleteProperty(LAST_PROCESSED_TIMESTAMP_PROP);
+  Logger.log('SUCCESS: Last processed timestamp has been reset. The script will re-evaluate all files on its next run.');
+}
+
 
 // --- Main Processing Logic ---
 
 function processNewCallFiles() {
-  var rootFolder = DriveApp.getFolderById(getRequiredProperty_(ROOT_FOLDER_ID_PROP));
-  var existingDocsCache = buildExistingDocsCache_(rootFolder);
-
   var sourceFolder = DriveApp.getFolderById(SOURCE_FOLDER_ID);
   var files = sourceFolder.getFilesByType(MimeType.PLAIN_TEXT);
 
-  var processedFiles = 0;
-  var skippedFiles = 0;
+  var scriptProperties = PropertiesService.getScriptProperties();
+  var lastProcessedTimestamp = new Date(scriptProperties.getProperty(LAST_PROCESSED_TIMESTAMP_PROP) || 0);
+  var newLatestTimestamp = new Date(lastProcessedTimestamp.getTime());
 
+  var processedFileCount = 0;
+  var filesToProcess = [];
+
+  // First pass: quickly filter for new files based on timestamp
   while (files.hasNext()) {
     var file = files.next();
+    if (file.getLastUpdated() > lastProcessedTimestamp) {
+      filesToProcess.push(file);
+    }
+  }
+
+  if (filesToProcess.length === 0) {
+    Logger.log('No new files to process.');
+    return;
+  }
+
+  Logger.log('Found ' + filesToProcess.length + ' new file(s) to evaluate.');
+
+  // Second pass: process the filtered list
+  filesToProcess.forEach(function(file) {
     try {
       var content = file.getBlob().getDataAsString();
       var data = JSON.parse(content);
 
       if (!data.call || !data.call.title) {
         Logger.log('Skipping file with missing data: ' + file.getName());
-        continue;
+        return; // 'continue' for forEach
       }
 
-      var title = data.call.title || 'Call Summary';
-      var date = new Date(data.call.time).toLocaleDateString();
-      var docTitle = title + ' - ' + date;
-
-      if (existingDocsCache.has(docTitle)) {
-        skippedFiles++;
-        continue;
-      }
-
-      if (createSummaryDocument_(file, data, docTitle)) {
-        processedFiles++;
-        existingDocsCache.add(docTitle);
+      if (createSummaryDocument_(file, data)) {
+        processedFileCount++;
+        var fileTimestamp = file.getLastUpdated();
+        if (fileTimestamp > newLatestTimestamp) {
+          newLatestTimestamp = fileTimestamp;
+        }
       }
     } catch (e) {
       Logger.log('Error processing file: ' + file.getName() + ' - ' + e.toString() + '\n' + e.stack);
     }
-  }
+  });
 
-  if (skippedFiles > 0) Logger.log('Skipped ' + skippedFiles + ' duplicate file(s).');
-  Logger.log(processedFiles > 0 ? 'Successfully created ' + processedFiles + ' new document(s).' : 'No new documents to create.');
+  // If we successfully processed any file, update the timestamp.
+  if (processedFileCount > 0) {
+     scriptProperties.setProperty(LAST_PROCESSED_TIMESTAMP_PROP, newLatestTimestamp.toISOString());
+     Logger.log('Finished processing. Last processed timestamp updated to: ' + newLatestTimestamp.toLocaleString());
+  } else {
+     Logger.log('Finished processing. No new documents were created.');
+  }
 }
 
-function createSummaryDocument_(file, data, docTitle) {
+function createSummaryDocument_(file, data) {
   var rootFolder = DriveApp.getFolderById(getRequiredProperty_(ROOT_FOLDER_ID_PROP));
 
   if (!data.call || !data.call.transcript) {
@@ -75,20 +97,29 @@ function createSummaryDocument_(file, data, docTitle) {
 
   var fullTranscript = buildTranscript_(data.call.transcript, data.call.users, data.call.externalParticipants);
 
-  // --- Guard for empty or short transcripts ---
   if (!fullTranscript || fullTranscript.trim().split(' ').length < 10) {
     Logger.log('Skipping file with short or empty transcript: ' + file.getName());
-    return false;
+    return true; // Mark as "processed" to advance the timestamp
   }
 
   var customerName = data.call.account_name || 'Unknown Customer';
   var customerFolder = getOrCreateCustomerFolder_(rootFolder, customerName);
 
+  var title = data.call.title || 'Call Summary';
+  var date = new Date(data.call.time).toLocaleDateString();
+  var docTitle = title + ' - ' + date;
+
+  // On-the-fly duplicate check for this specific document
+  if (customerFolder.getFilesByName(docTitle).hasNext()) {
+    Logger.log('Skipping creation of duplicate document: "' + docTitle + '"');
+    return true; // Mark as "processed" to advance the timestamp
+  }
+
   var generatedSummary = callGeminiApi_(fullTranscript);
 
   if (!generatedSummary) {
     Logger.log('Failed to generate summary for file: ' + file.getName());
-    return false;
+    return false; // Do not advance the timestamp if the API call fails
   }
 
   var doc = DocumentApp.create(docTitle);
@@ -178,19 +209,6 @@ function mergeFolders(sourceFolderName, destinationFolderName) {
 
 // --- Helper Functions ---
 
-function buildExistingDocsCache_(rootFolder) {
-  var cache = new Set();
-  var customerFolders = rootFolder.getFolders();
-  while (customerFolders.hasNext()) {
-    var customerFolder = customerFolders.next();
-    var docs = customerFolder.getFilesByType(MimeType.GOOGLE_DOCS);
-    while (docs.hasNext()) {
-      cache.add(docs.next().getName());
-    }
-  }
-  return cache;
-}
-
 function jaroWinklerSimilarity_(s1, s2) {
   var m = 0;
   if (s1.length === 0 || s2.length === 0) return 0;
@@ -240,7 +258,6 @@ function callGeminiApi_(transcript) {
     var jsonResponse = JSON.parse(responseBody);
     var contentText = jsonResponse.candidates[0].content.parts[0].text;
 
-    // --- New, more robust JSON cleaning ---
     var match = contentText.match(/\{[\s\S]*\}/);
     if (match) {
       try {
@@ -288,23 +305,17 @@ function buildTranscript_(transcriptData, users, externalParticipants) {
 
   transcriptData.forEach(function(line) {
     if (line.personId !== currentSpeakerId) {
-      // Speaker has changed, or it's the first line.
-      // First, save the previous block of dialogue.
       if (currentSpeakerId !== null) {
         var speakerName = speakerMap[currentSpeakerId] || 'Unknown Speaker';
         dialogueBlocks.push(speakerName + ':\n' + currentLines.join('\n'));
       }
-
-      // Reset for the new speaker.
       currentSpeakerId = line.personId;
       currentLines = [line.text];
     } else {
-      // Same speaker, just add their line.
       currentLines.push(line.text);
     }
   });
 
-  // Add the very last block of dialogue.
   if (currentSpeakerId !== null) {
     var speakerName = speakerMap[currentSpeakerId] || 'Unknown Speaker';
     dialogueBlocks.push(speakerName + ':\n' + currentLines.join('\n'));
