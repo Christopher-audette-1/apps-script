@@ -6,9 +6,7 @@
 - Before running any tasks, ensure the `GOOGLE_APPLICATION_CREDENTIALS` variable is enabled.
 
 ## Authentication Workflow
-1. Use the command `jules login` to establish your session if needed.
-2. If you need to interact with the Apps Script API, use the custom Client ID from the Environment Variables.
-3. Never output raw credentials or tokens into the chat logs.
+- Use the `verify_clasp.sh` script in the root directory to log in to clasp using the `CLASPRC_JSON_CONTENT` environment variable.
 
 ## Task Guidelines
 - **Pulling Code:** Run `clasp pull` to sync the latest from Google.
