@@ -51,7 +51,7 @@ function runReceiptForwarder() {
 }
 
 function forwardReceiptsFromGmail_(lastRun) {
-    var query = 'label:[superhuman]-ai-card_receipts ' + CARD_NUMBERS.join(' OR ') + ' -from:me has:attachment';
+    var query = 'label:[superhuman]-ai-card_receipts';
     if (lastRun) {
         var lastRunFormatted = Math.round(lastRun.getTime() / 1000);
         query += ' after:' + lastRunFormatted;
@@ -101,7 +101,7 @@ function previewReceiptForwarder() {
     }
   }
 
-  var query = 'label:[superhuman]-ai-card_receipts ' + CARD_NUMBERS.join(' OR ') + ' -from:me has:attachment';
+  var query = 'label:[superhuman]-ai-card_receipts';
   if (lastRun) {
       var lastRunFormatted = Math.round(lastRun.getTime() / 1000);
       query += ' after:' + lastRunFormatted;
