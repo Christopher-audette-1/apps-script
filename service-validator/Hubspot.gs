@@ -22,7 +22,9 @@ function testHubspotConnection() {
     'headers': {
       'Authorization': `Bearer ${apiKey}`
     },
-    'muteHttpExceptions': true
+    'muteHttpExceptions':.
+
+    true
   };
 
   try {
