@@ -1,25 +1,19 @@
 var RECEIPT_EMAIL = 'receipts@venn.ca';
 var RECEIPT_FOLDER_ID_PROP = 'RECEIPT_FOLDER_ID';
 var RECEIPT_LAST_RUN_PROP = 'RECEIPT_LAST_RUN';
+var CARD_NUMBERS = ['3174', '2735', '8287', '0764'];
 
 function runReceiptForwarder() {
+  var lastRun = getLastRun_();
+
+  // Process Drive files
   var folderId = getRequiredProperty_(RECEIPT_FOLDER_ID_PROP);
   var folder = getFolderWithRetries_(folderId);
-  var lastRun = getLastRun_();
   var newFiles = collectNewFiles_(folder, lastRun);
-
-  if (!lastRun) {
-    setLastRun_(new Date());
-    return;
-  }
-
-  if (!newFiles.length) {
-    setLastRun_(new Date());
-    return;
-  }
 
   var attachments = [];
   var fileNames = [];
+
   for (var i = 0; i < newFiles.length; i++) {
     var attachment = getAttachmentForFile_(newFiles[i]);
     if (!attachment) {
@@ -27,6 +21,21 @@ function runReceiptForwarder() {
     }
     attachments.push(attachment);
     fileNames.push(newFiles[i].getName());
+  }
+
+  // Process Gmail emails
+  var gmailResults = forwardReceiptsFromGmail_(lastRun);
+  attachments = attachments.concat(gmailResults.attachments);
+  fileNames = fileNames.concat(gmailResults.fileNames);
+
+  if (!lastRun) {
+    setLastRun_(new Date());
+    return;
+  }
+
+  if (attachments.length === 0) {
+    setLastRun_(new Date());
+    return;
   }
 
   if (attachments.length) {
@@ -40,6 +49,35 @@ function runReceiptForwarder() {
 
   setLastRun_(new Date());
 }
+
+function forwardReceiptsFromGmail_(lastRun) {
+    var query = CARD_NUMBERS.join(' OR ') + ' -from:me has:attachment';
+    if (lastRun) {
+        var lastRunFormatted = Math.round(lastRun.getTime() / 1000);
+        query += ' after:' + lastRunFormatted;
+    }
+
+    var threads = GmailApp.search(query);
+    var attachments = [];
+    var fileNames = [];
+
+    for (var i = 0; i < threads.length; i++) {
+        var messages = threads[i].getMessages();
+        for (var j = 0; j < messages.length; j++) {
+            var messageAttachments = messages[j].getAttachments();
+            for (var k = 0; k < messageAttachments.length; k++) {
+                attachments.push(messageAttachments[k]);
+                fileNames.push(messageAttachments[k].getName());
+            }
+        }
+    }
+
+    return {
+        attachments: attachments,
+        fileNames: fileNames
+    };
+}
+
 
 function previewReceiptForwarder() {
   var folderId = getRequiredProperty_(RECEIPT_FOLDER_ID_PROP);
@@ -56,12 +94,24 @@ function previewReceiptForwarder() {
 
   if (!newFiles.length) {
     Logger.log('No new files since %s.', lastRun.toISOString());
-    return;
+  } else {
+    Logger.log('Found %s new file(s) since %s:', newFiles.length, lastRun.toISOString());
+    for (var i = 0; i < newFiles.length; i++) {
+        Logger.log('- %s (created %s)', newFiles[i].getName(), newFiles[i].getDateCreated().toISOString());
+    }
   }
 
-  Logger.log('Found %s new file(s) since %s:', newFiles.length, lastRun.toISOString());
-  for (var i = 0; i < newFiles.length; i++) {
-    Logger.log('- %s (created %s)', newFiles[i].getName(), newFiles[i].getDateCreated().toISOString());
+  var query = CARD_NUMBERS.join(' OR ') + ' -from:me has:attachment';
+  if (lastRun) {
+      var lastRunFormatted = Math.round(lastRun.getTime() / 1000);
+      query += ' after:' + lastRunFormatted;
+  }
+  var threads = GmailApp.search(query);
+  Logger.log('Gmail search query: "%s"', query);
+  if (threads.length > 0) {
+    Logger.log('Found %s matching email thread(s).', threads.length);
+  } else {
+    Logger.log('No new emails found matching the criteria.');
   }
 }
 

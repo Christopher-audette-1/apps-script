@@ -12,7 +12,8 @@
   "oauthScopes": [
     "https://www.googleapis.com/auth/script.projects",
     "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/gmail.send"
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly"
   ],
   "executionApi": {
     "access": "DOMAIN"
