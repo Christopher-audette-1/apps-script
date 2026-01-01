@@ -7,7 +7,6 @@
  * Runs all connection tests and logs the results.
  * This is the main entry point to be executed from the Apps Script editor.
  */
-
 function runAllTests() {
   const logger = BetterLog.getCloudLogger();
   let allTestsPassed = true;
