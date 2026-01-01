@@ -51,11 +51,15 @@ function runReceiptForwarder() {
 }
 
 function forwardReceiptsFromGmail_(lastRun) {
-    var query = 'label:[superhuman]-ai-card_receipts';
+    var query = 'label:[superhuman]-ai-card_receipts -label:forwarded-receipt';
 
     var threads = GmailApp.search(query);
     var attachments = [];
     var fileNames = [];
+    var label = GmailApp.getUserLabelByName('forwarded-receipt');
+    if (!label) {
+        label = GmailApp.createLabel('forwarded-receipt');
+    }
 
     for (var i = 0; i < threads.length; i++) {
         var messages = threads[i].getMessages();
@@ -66,6 +70,7 @@ function forwardReceiptsFromGmail_(lastRun) {
                 fileNames.push(messageAttachments[k].getName());
             }
         }
+        threads[i].addLabel(label);
     }
 
     return {
@@ -97,7 +102,7 @@ function previewReceiptForwarder() {
     }
   }
 
-  var query = 'label:[superhuman]-ai-card_receipts';
+  var query = 'label:[superhuman]-ai-card_receipts -label:forwarded-receipt';
   var threads = GmailApp.search(query);
   Logger.log('Gmail search query: "%s"', query);
   if (threads.length > 0) {
