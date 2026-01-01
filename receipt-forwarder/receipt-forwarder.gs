@@ -52,10 +52,6 @@ function runReceiptForwarder() {
 
 function forwardReceiptsFromGmail_(lastRun) {
     var query = 'label:[superhuman]-ai-card_receipts';
-    if (lastRun) {
-        var lastRunFormatted = Math.round(lastRun.getTime() / 1000);
-        query += ' after:' + lastRunFormatted;
-    }
 
     var threads = GmailApp.search(query);
     var attachments = [];
@@ -102,10 +98,6 @@ function previewReceiptForwarder() {
   }
 
   var query = 'label:[superhuman]-ai-card_receipts';
-  if (lastRun) {
-      var lastRunFormatted = Math.round(lastRun.getTime() / 1000);
-      query += ' after:' + lastRunFormatted;
-  }
   var threads = GmailApp.search(query);
   Logger.log('Gmail search query: "%s"', query);
   if (threads.length > 0) {
