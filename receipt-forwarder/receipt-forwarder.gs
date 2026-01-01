@@ -51,26 +51,18 @@ function runReceiptForwarder() {
 }
 
 function forwardReceiptsFromGmail_(lastRun) {
-    var query = 'label:[superhuman]-ai-card_receipts';
+    var query = 'label:[superhuman]-ai-card_receipts -label:forwarded-receipt';
 
     var threads = GmailApp.search(query);
     var attachments = [];
     var fileNames = [];
+    var label = GmailApp.getUserLabelByName('forwarded-receipt');
+    if (!label) {
+        label = GmailApp.createLabel('forwarded-receipt');
+    }
 
     for (var i = 0; i < threads.length; i++) {
         var messages = threads[i].getMessages();
-        var isForwarded = false;
-        for (var j = 0; j < messages.length; j++) {
-            if (messages[j].getTo().indexOf(RECEIPT_EMAIL) !== -1) {
-                isForwarded = true;
-                break;
-            }
-        }
-
-        if (isForwarded) {
-            continue;
-        }
-
         for (var j = 0; j < messages.length; j++) {
             var messageAttachments = messages[j].getAttachments();
             for (var k = 0; k < messageAttachments.length; k++) {
@@ -78,6 +70,7 @@ function forwardReceiptsFromGmail_(lastRun) {
                 fileNames.push(messageAttachments[k].getName());
             }
         }
+        threads[i].addLabel(label);
     }
 
     return {
@@ -109,11 +102,11 @@ function previewReceiptForwarder() {
     }
   }
 
-  var query = 'label:[superhuman]-ai-card_receipts';
+  var query = 'label:[superhuman]-ai-card_receipts -label:forwarded-receipt';
   var threads = GmailApp.search(query);
   Logger.log('Gmail search query: "%s"', query);
   if (threads.length > 0) {
-    Logger.log('Found %s matching email thread(s). Will check each thread to see if it has been forwarded.', threads.length);
+    Logger.log('Found %s matching email thread(s).', threads.length);
   } else {
     Logger.log('No new emails found matching the criteria.');
   }
