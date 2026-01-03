@@ -2,6 +2,7 @@
 const SOURCE_SHEET_NAME_SALES = 'Sales Forecast';
 const SOURCE_SHEET_NAME_FORECAST = 'Forecast Deals'; // outputs as "Deals-[Date]"
 const SOURCE_SHEET_NAME_PBF = 'PBF Deals';
+const DEALS_SHEET_NAME = 'Deals'; // User specified sheet name
 
 /*** MENU ***/
 function onOpen() {
@@ -14,14 +15,23 @@ function onOpen() {
     .addItem('Snapshot PBF (today)', 'SnapshotPBF')
     .addSeparator()
     .addItem('Create Weekly Deals Trigger (Mon 08:00)', 'createWeeklySnapshotTrigger')
-    .addItem('Create Monthly Sales Trigger (1st 08:00)', 'createMonthlySalesTrigger')  // NEW
+    .addItem('Create Monthly Sales Trigger (1st 08:00)', 'createMonthlySalesTrigger')
     .addItem('Create Monthly PBF Trigger (1st 08:00)', 'createMonthlyPBFTrigger')
     .addSeparator()
     .addItem('Delete Deals Triggers', 'deleteForecastSnapshotTriggers')
-    .addItem('Delete Sales Triggers', 'deleteSalesSnapshotTriggers') // NEW
+    .addItem('Delete Sales Triggers', 'deleteSalesSnapshotTriggers')
     .addItem('Delete PBF Triggers', 'deletePBFSnapshotTriggers')
     .addSeparator()
     .addItem('Delete ALL Snapshot Triggers', 'deleteAllSnapshotTriggers')
+    .addToUi();
+
+  // New menu for formula copy
+  SpreadsheetApp.getUi()
+    .createMenu('Deal Data Formulas')
+    .addItem('Copy Formulas Down (run once)', 'copyFormulasDownDealsTab')
+    .addSeparator()
+    .addItem('Create Daily Formula Trigger (02:00 AM)', 'createDailyDealsFormulaTrigger')
+    .addItem('Delete Daily Formula Trigger', 'deleteDailyDealsFormulaTrigger')
     .addToUi();
 }
 
@@ -98,6 +108,48 @@ function SnapshotAll() {
     7
   );
   return { salesName: salesName, dealsName: dealsName, pbfName: pbfName };
+}
+
+// NEW: Function to copy formulas down in the "Deals" tab
+function copyFormulasDownDealsTab() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(DEALS_SHEET_NAME);
+
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('Error', 'Sheet "' + DEALS_SHEET_NAME + '" not found.', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { // No data or only header row
+    SpreadsheetApp.getActive().toast('No data rows to copy formulas to.', 'Formula Copy', 3);
+    return;
+  }
+
+  // Columns Y, Z, AA, AB
+  const targetColumns = [25, 26, 27, 28]; // Y, Z, AA, AB
+
+  try {
+    targetColumns.forEach(function(colIndex) {
+      const sourceCell = sheet.getRange(2, colIndex); // Row 2
+      const formula = sourceCell.getFormula();
+
+      if (formula) {
+        // Apply formula to the range from row 2 down to the last row
+        // Using getRange(2, colIndex, lastRow - 1) means from row 2 to lastRow
+        // If lastRow is 2, then lastRow - 1 is 1, so it targets only row 2.
+        // If lastRow is 10, then lastRow - 1 is 9, so it targets 9 rows starting from row 2.
+        sheet.getRange(2, colIndex, lastRow - 1).setFormula(formula);
+      }
+    });
+    SpreadsheetApp.getActive().toast(
+      'Formulas copied down in "' + DEALS_SHEET_NAME + '" tab.',
+      'Formula Copy',
+      5
+    );
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('Error copying formulas:', e.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
 }
 
 /*** CORE IMPLEMENTATION (shared) ***/
@@ -208,7 +260,7 @@ function createWeeklySnapshotTrigger() {
   SpreadsheetApp.getActive().toast('Weekly Deals trigger: Mondays at 08:00', 'Snapshots', 5);
 }
 
-function createMonthlySalesTrigger() {  // NEW
+function createMonthlySalesTrigger() {
   ScriptApp.getProjectTriggers()
     .filter(function(t) { return t.getHandlerFunction() === 'SnapshotSales'; })
     .forEach(function(t) { ScriptApp.deleteTrigger(t); });
@@ -236,6 +288,38 @@ function createMonthlyPBFTrigger() {
   SpreadsheetApp.getActive().toast('Monthly PBF trigger: 1st at 08:00', 'Snapshots', 5);
 }
 
+// NEW: Function to create a daily trigger for copyFormulasDownDealsTab()
+function createDailyDealsFormulaTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(function(t) { return t.getHandlerFunction() === 'copyFormulasDownDealsTab'; })
+    .forEach(function(t) { ScriptApp.deleteTrigger(t); });
+
+  // Trigger to run every day between 2 AM and 3 AM
+  ScriptApp.newTrigger('copyFormulasDownDealsTab')
+    .timeBased()
+    .everyDays(1)
+    .atHour(2) // 2 AM
+    .create();
+
+  SpreadsheetApp.getActive().toast(
+    'Daily formula copy trigger for "' + DEALS_SHEET_NAME + '" created (02:00 AM).',
+    'Formula Copy',
+    5
+  );
+}
+
+// NEW: Function to delete the daily trigger for copyFormulasDownDealsTab()
+function deleteDailyDealsFormulaTrigger() {
+  const triggers = ScriptApp.getProjectTriggers()
+    .filter(function(t) { return t.getHandlerFunction() === 'copyFormulasDownDealsTab'; });
+  triggers.forEach(function(t) { ScriptApp.deleteTrigger(t); });
+  SpreadsheetApp.getActive().toast(
+    'Deleted ' + triggers.length + ' daily formula copy trigger(s) for "' + DEALS_SHEET_NAME + '".',
+    'Formula Copy',
+    5
+  );
+}
+
 /*** TRIGGER CLEANUP ***/
 function deleteForecastSnapshotTriggers() {
   const triggers = ScriptApp.getProjectTriggers()
@@ -244,7 +328,7 @@ function deleteForecastSnapshotTriggers() {
   SpreadsheetApp.getActive().toast('Deleted ' + triggers.length + ' Deals trigger(s).', 'Snapshots', 5);
 }
 
-function deleteSalesSnapshotTriggers() { // NEW
+function deleteSalesSnapshotTriggers() {
   const triggers = ScriptApp.getProjectTriggers()
     .filter(function(t) { return t.getHandlerFunction() === 'SnapshotSales'; });
   triggers.forEach(function(t) { ScriptApp.deleteTrigger(t); });
@@ -259,7 +343,7 @@ function deletePBFSnapshotTriggers() {
 }
 
 function deleteAllSnapshotTriggers() {
-  const handlers = { SnapshotForecast: true, SnapshotPBF: true, SnapshotSales: true }; // UPDATED
+  const handlers = { SnapshotForecast: true, SnapshotPBF: true, SnapshotSales: true, copyFormulasDownDealsTab: true }; // UPDATED
   const triggers = ScriptApp.getProjectTriggers()
     .filter(function(t) { return handlers[t.getHandlerFunction()]; });
   triggers.forEach(function(t) { ScriptApp.deleteTrigger(t); });
