@@ -62,18 +62,16 @@ function runBillForwarder() {
     }
 
     if (attachments.length > 0) {
-      Logger.log('Attempting to send email for thread ID: ' + threads[i].getId() + ' with ' + fileNames.length + ' attachments.');
+      var lastMessage = messages[messages.length - 1];
+      Logger.log('Attempting to forward thread ID: ' + threads[i].getId() + ' with ' + fileNames.length + ' attachments.');
       try {
-        MailApp.sendEmail({
-          to: FORWARD_EMAIL,
-          subject: 'Forwarded Bill (' + fileNames.length + ')',
-          body: 'Attached bills:\n\n' + fileNames.join('\n'),
+        lastMessage.forward(FORWARD_EMAIL, {
           attachments: attachments
         });
-        Logger.log('Email sent successfully for thread ID: ' + threads[i].getId());
+        Logger.log('Thread forwarded successfully: ' + threads[i].getId());
         threads[i].addLabel(forwardedLabel);
       } catch (e) {
-        Logger.log('Error sending email for thread ID: ' + threads[i].getId() + ' - ' + e.toString());
+        Logger.log('Error forwarding thread: ' + threads[i].getId() + ' - ' + e.toString());
         threads[i].addLabel(sendErrorLabel);
       }
     } else {
@@ -151,18 +149,17 @@ function previewBillForwarder() {
     }
 
     if (attachments.length > 0) {
-      Logger.log('--- Email to be sent (Preview) ---');
+      Logger.log('--- Thread to be forwarded (Preview) ---');
       Logger.log('To: ' + PREVIEW_FORWARD_EMAIL);
-      Logger.log('Subject: Forwarded Bill (' + fileNames.length + ')');
-      Logger.log('Body: Attached bills:\n\n' + fileNames.join('\n'));
-      Logger.log('Attachments (names): ' + fileNames.join(', '));
+      Logger.log('Original Thread Subject: ' + threads[i].getFirstMessageSubject());
+      Logger.log('Attachments that will be included ('+ fileNames.length +'): ' + fileNames.join(', '));
       if (skippedAttachments.length > 0) {
         Logger.log('Skipped Attachments:');
         skippedAttachments.forEach(function(skipped) {
           Logger.log('- ' + skipped.name + ': ' + skipped.reason);
         });
       }
-      Logger.log('--- End Email Preview ---');
+      Logger.log('--- End Forward Preview ---');
 
       Logger.log('Simulating adding label "' + FORWARDED_LABEL + '" to thread ID: ' + threads[i].getId());
     } else {
