@@ -71,6 +71,7 @@ function forwardReceiptsFromGmail_(lastRun) {
             }
         }
         threads[i].addLabel(label);
+        threads[i].moveToArchive();
     }
 
     return {
@@ -112,16 +113,15 @@ function previewReceiptForwarder() {
   }
 }
 
-function createDailyReceiptTrigger() {
-  removeReceiptTriggers_();
+function createFrequentReceiptTrigger() {
+  removeTriggers_();
   ScriptApp.newTrigger('runReceiptForwarder')
     .timeBased()
-    .everyDays(1)
-    .atHour(8)
+    .everyMinutes(5)
     .create();
 }
 
-function removeReceiptTriggers_() {
+function removeTriggers_() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'runReceiptForwarder') {
