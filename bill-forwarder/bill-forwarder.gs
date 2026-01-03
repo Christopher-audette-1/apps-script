@@ -1,21 +1,26 @@
 const FORWARD_EMAIL = 'audettebills@qbodocs.com';
 const LABEL_TO_SEARCH = 'label:[superhuman]-ai-bill';
-const EXCLUDE_LABEL = 'forwarded-bill';
+const FORWARDED_LABEL = 'forwarded-bill';
+const REVIEWED_LABEL = 'reviewed';
 const ADDITIONAL_EXCLUDE_LABELS = ['audette_invoice'];
 const MIN_ATTACHMENT_SIZE_KB = 45;
 const ALLOWED_CONTENT_TYPES = ['application/pdf', 'text/csv'];
 
 function runBillForwarder() {
   let query = LABEL_TO_SEARCH;
-  const allExcludeLabels = [EXCLUDE_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
+  const allExcludeLabels = [FORWARDED_LABEL, REVIEWED_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
   for (const label of allExcludeLabels) {
     query += ` -label:${label}`;
   }
   var threads = GmailApp.search(query);
   
-  var forwardedLabel = GmailApp.getUserLabelByName(EXCLUDE_LABEL);
+  var forwardedLabel = GmailApp.getUserLabelByName(FORWARDED_LABEL);
   if (!forwardedLabel) {
-    forwardedLabel = GmailApp.createLabel(EXCLUDE_LABEL);
+    forwardedLabel = GmailApp.createLabel(FORWARDED_LABEL);
+  }
+  var reviewedLabel = GmailApp.getUserLabelByName(REVIEWED_LABEL);
+  if (!reviewedLabel) {
+    reviewedLabel = GmailApp.createLabel(REVIEWED_LABEL);
   }
 
   for (var i = 0; i < threads.length; i++) {
@@ -58,9 +63,10 @@ function runBillForwarder() {
         body: 'Attached bills:\n\n' + fileNames.join('\n'),
         attachments: attachments
       });
+      threads[i].addLabel(forwardedLabel);
+    } else {
+      threads[i].addLabel(reviewedLabel);
     }
-    // Always add the label to mark the thread as reviewed, even if no attachments were forwarded.
-    threads[i].addLabel(forwardedLabel);
   }
 }
 
@@ -69,13 +75,12 @@ function runBillForwarder() {
  * Logs the intended actions to the Apps Script console.
  */
 function previewBillForwarder() {
-  const PREVIEW_FORWARD_EMAIL = FORWARD_EMAIL; // Use the same target email for logging
-  const PREVIEW_EXCLUDE_LABEL = EXCLUDE_LABEL; // Use the same label for logging
+  const PREVIEW_FORWARD_EMAIL = FORWARD_EMAIL;
 
   Logger.log('--- Starting Bill Forwarder Preview ---');
 
   let query = LABEL_TO_SEARCH;
-  const allExcludeLabels = [EXCLUDE_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
+  const allExcludeLabels = [FORWARDED_LABEL, REVIEWED_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
   for (const label of allExcludeLabels) {
     query += ` -label:${label}`;
   }
@@ -84,7 +89,8 @@ function previewBillForwarder() {
   Logger.log('Found ' + threads.length + ' threads matching the query.');
   
   // Simulate label creation/retrieval for logging purposes
-  Logger.log('Simulating retrieval/creation of label: ' + PREVIEW_EXCLUDE_LABEL);
+  Logger.log('Simulating retrieval/creation of label: ' + FORWARDED_LABEL);
+  Logger.log('Simulating retrieval/creation of label: ' + REVIEWED_LABEL);
 
   for (var i = 0; i < threads.length; i++) {
     var messages = threads[i].getMessages();
@@ -144,18 +150,17 @@ function previewBillForwarder() {
       }
       Logger.log('--- End Email Preview ---');
 
-      Logger.log('Simulating adding label "' + PREVIEW_EXCLUDE_LABEL + '" to thread ID: ' + threads[i].getId());
+      Logger.log('Simulating adding label "' + FORWARDED_LABEL + '" to thread ID: ' + threads[i].getId());
     } else {
-      Logger.log('No qualifying attachments found for thread ID: ' + threads[i].getId() + '. Skipping.');
+      Logger.log('No qualifying attachments found for thread ID: ' + threads[i].getId() + '. Skipping email but applying reviewed label.');
        if (skippedAttachments.length > 0) {
         Logger.log('Skipped Attachments:');
         skippedAttachments.forEach(function(skipped) {
           Logger.log('- ' + skipped.name + ': ' + skipped.reason);
         });
       }
+      Logger.log('Simulating adding label "' + REVIEWED_LABEL + '" to thread ID: ' + threads[i].getId());
     }
-    // Always simulate adding the label to mark the thread as reviewed, even if no attachments were forwarded.
-    Logger.log('Simulating adding label "' + PREVIEW_EXCLUDE_LABEL + '" to thread ID: ' + threads[i].getId());
   }
   Logger.log('--- Bill Forwarder Preview Finished ---');
 }
