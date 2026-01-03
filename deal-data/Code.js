@@ -374,9 +374,9 @@ function createDailyLineItemsFormulaTrigger() {
   // Trigger to run every day between 2:30 AM and 3:30 AM
   ScriptApp.newTrigger('copyFormulasDownLineItemsTab')
     .timeBased()
-    .everyDays(1)
     .atHour(2) // 2 AM
     .atMinute(30) // 2:30 AM
+    .everyDays(1)
     .create();
 
   SpreadsheetApp.getActive().toast(
