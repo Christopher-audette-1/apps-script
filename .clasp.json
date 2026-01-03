@@ -1,0 +1,16 @@
+{
+  "scriptId": "1Yc2iZ2L7D4MuNMnAIu9AJ_e8bJrOI1FRrZj2XUk6W_tp-FCOaCUBRWL6",
+  "rootDir": "deal-data",
+  "scriptExtensions": [
+    ".js",
+    ".gs"
+  ],
+  "htmlExtensions": [
+    ".html"
+  ],
+  "jsonExtensions": [
+    ".json"
+  ],
+  "filePushOrder": [],
+  "skipSubdirectories": false
+}
