@@ -2,13 +2,14 @@ const FORWARD_EMAIL = 'audettebills@qbodocs.com';
 const LABEL_TO_SEARCH = 'label:[superhuman]-ai-bill';
 const FORWARDED_LABEL = 'forwarded-bill';
 const REVIEWED_LABEL = 'reviewed';
+const SEND_ERROR_LABEL = 'send-error'; // New constant
 const ADDITIONAL_EXCLUDE_LABELS = ['audette_invoice'];
 const MIN_ATTACHMENT_SIZE_KB = 45;
 const ALLOWED_CONTENT_TYPES = ['application/pdf', 'text/csv'];
 
 function runBillForwarder() {
   let query = LABEL_TO_SEARCH;
-  const allExcludeLabels = [FORWARDED_LABEL, REVIEWED_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
+  const allExcludeLabels = [FORWARDED_LABEL, REVIEWED_LABEL, SEND_ERROR_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
   for (const label of allExcludeLabels) {
     query += ` -label:${label}`;
   }
@@ -21,6 +22,10 @@ function runBillForwarder() {
   var reviewedLabel = GmailApp.getUserLabelByName(REVIEWED_LABEL);
   if (!reviewedLabel) {
     reviewedLabel = GmailApp.createLabel(REVIEWED_LABEL);
+  }
+  var sendErrorLabel = GmailApp.getUserLabelByName(SEND_ERROR_LABEL); // Get or create new label
+  if (!sendErrorLabel) {
+    sendErrorLabel = GmailApp.createLabel(SEND_ERROR_LABEL);
   }
 
   for (var i = 0; i < threads.length; i++) {
@@ -57,13 +62,20 @@ function runBillForwarder() {
     }
 
     if (attachments.length > 0) {
-      MailApp.sendEmail({
-        to: FORWARD_EMAIL,
-        subject: 'Forwarded Bill (' + fileNames.length + ')',
-        body: 'Attached bills:\n\n' + fileNames.join('\n'),
-        attachments: attachments
-      });
-      threads[i].addLabel(forwardedLabel);
+      Logger.log('Attempting to send email for thread ID: ' + threads[i].getId() + ' with ' + fileNames.length + ' attachments.');
+      try {
+        MailApp.sendEmail({
+          to: FORWARD_EMAIL,
+          subject: 'Forwarded Bill (' + fileNames.length + ')',
+          body: 'Attached bills:\n\n' + fileNames.join('\n'),
+          attachments: attachments
+        });
+        Logger.log('Email sent successfully for thread ID: ' + threads[i].getId());
+        threads[i].addLabel(forwardedLabel);
+      } catch (e) {
+        Logger.log('Error sending email for thread ID: ' + threads[i].getId() + ' - ' + e.toString());
+        threads[i].addLabel(sendErrorLabel);
+      }
     } else {
       threads[i].addLabel(reviewedLabel);
     }
@@ -80,7 +92,7 @@ function previewBillForwarder() {
   Logger.log('--- Starting Bill Forwarder Preview ---');
 
   let query = LABEL_TO_SEARCH;
-  const allExcludeLabels = [FORWARDED_LABEL, REVIEWED_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
+  const allExcludeLabels = [FORWARDED_LABEL, REVIEWED_LABEL, SEND_ERROR_LABEL, ...ADDITIONAL_EXCLUDE_LABELS];
   for (const label of allExcludeLabels) {
     query += ` -label:${label}`;
   }
@@ -91,6 +103,8 @@ function previewBillForwarder() {
   // Simulate label creation/retrieval for logging purposes
   Logger.log('Simulating retrieval/creation of label: ' + FORWARDED_LABEL);
   Logger.log('Simulating retrieval/creation of label: ' + REVIEWED_LABEL);
+  Logger.log('Simulating retrieval/creation of label: ' + SEND_ERROR_LABEL);
+
 
   for (var i = 0; i < threads.length; i++) {
     var messages = threads[i].getMessages();
