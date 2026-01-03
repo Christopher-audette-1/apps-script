@@ -70,12 +70,14 @@ function runBillForwarder() {
         });
         Logger.log('Thread forwarded successfully: ' + threads[i].getId());
         threads[i].addLabel(forwardedLabel);
+        threads[i].moveToArchive();
       } catch (e) {
         Logger.log('Error forwarding thread: ' + threads[i].getId() + ' - ' + e.toString());
         threads[i].addLabel(sendErrorLabel);
       }
     } else {
       threads[i].addLabel(reviewedLabel);
+      threads[i].moveToArchive();
     }
   }
 }
@@ -176,16 +178,15 @@ function previewBillForwarder() {
   Logger.log('--- Bill Forwarder Preview Finished ---');
 }
 
-function createDailyBillForwarderTrigger() {
-  removeBillForwarderTriggers_();
+function createFrequentBillForwarderTrigger() {
+  removeTriggers_();
   ScriptApp.newTrigger('runBillForwarder')
     .timeBased()
-    .everyDays(1)
-    .atHour(9) // You can adjust the hour as needed
+    .everyMinutes(5)
     .create();
 }
 
-function removeBillForwarderTriggers_() {
+function removeTriggers_() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'runBillForwarder') {
