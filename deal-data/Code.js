@@ -3,6 +3,7 @@ const SOURCE_SHEET_NAME_SALES = 'Sales Forecast';
 const SOURCE_SHEET_NAME_FORECAST = 'Forecast Deals'; // outputs as "Deals-[Date]"
 const SOURCE_SHEET_NAME_PBF = 'PBF Deals';
 const DEALS_SHEET_NAME = 'Deals'; // User specified sheet name
+const LINE_ITEMS_SHEET_NAME = 'Line Items'; // New: User specified sheet name
 
 /*** MENU ***/
 function onOpen() {
@@ -32,6 +33,10 @@ function onOpen() {
     .addSeparator()
     .addItem('Create Daily Formula Trigger (02:00 AM)', 'createDailyDealsFormulaTrigger')
     .addItem('Delete Daily Formula Trigger', 'deleteDailyDealsFormulaTrigger')
+    .addSeparator() // Added separator for new menu items
+    .addItem('Copy Line Items Formulas Down (run once)', 'copyFormulasDownLineItemsTab')
+    .addItem('Create Daily Line Items Formula Trigger (02:30 AM)', 'createDailyLineItemsFormulaTrigger')
+    .addItem('Delete Daily Line Items Formula Trigger', 'deleteDailyLineItemsFormulaTrigger')
     .addToUi();
 }
 
@@ -110,7 +115,7 @@ function SnapshotAll() {
   return { salesName: salesName, dealsName: dealsName, pbfName: pbfName };
 }
 
-// NEW: Function to copy formulas down in the "Deals" tab
+// Function to copy formulas down in the "Deals" tab
 function copyFormulasDownDealsTab() {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(DEALS_SHEET_NAME);
@@ -151,6 +156,46 @@ function copyFormulasDownDealsTab() {
     SpreadsheetApp.getUi().alert('Error copying formulas:', e.message, SpreadsheetApp.getUi().ButtonSet.OK);
   }
 }
+
+// NEW: Function to copy formulas down in the "Line Items" tab
+function copyFormulasDownLineItemsTab() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(LINE_ITEMS_SHEET_NAME);
+
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('Error', 'Sheet "' + LINE_ITEMS_SHEET_NAME + '" not found.', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { // No data or only header row
+    SpreadsheetApp.getActive().toast('No data rows to copy formulas to.', 'Line Items Formula Copy', 3);
+    return;
+  }
+
+  // Columns B, C, D
+  const targetColumns = [2, 3, 4]; // B, C, D
+
+  try {
+    targetColumns.forEach(function(colIndex) {
+      const sourceCell = sheet.getRange(2, colIndex); // Row 2
+      const formula = sourceCell.getFormula();
+
+      if (formula) {
+        // Apply formula to the range from row 2 down to the last row
+        sheet.getRange(2, colIndex, lastRow - 1).setFormula(formula);
+      }
+    });
+    SpreadsheetApp.getActive().toast(
+      'Formulas copied down in "' + LINE_ITEMS_SHEET_NAME + '" tab.',
+      'Line Items Formula Copy',
+      5
+    );
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('Error copying formulas:', e.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
 
 /*** CORE IMPLEMENTATION (shared) ***/
 function snapshotFromSource_(sourceSheetName, prefix) {
@@ -288,7 +333,7 @@ function createMonthlyPBFTrigger() {
   SpreadsheetApp.getActive().toast('Monthly PBF trigger: 1st at 08:00', 'Snapshots', 5);
 }
 
-// NEW: Function to create a daily trigger for copyFormulasDownDealsTab()
+// Function to create a daily trigger for copyFormulasDownDealsTab()
 function createDailyDealsFormulaTrigger() {
   ScriptApp.getProjectTriggers()
     .filter(function(t) { return t.getHandlerFunction() === 'copyFormulasDownDealsTab'; })
@@ -308,7 +353,7 @@ function createDailyDealsFormulaTrigger() {
   );
 }
 
-// NEW: Function to delete the daily trigger for copyFormulasDownDealsTab()
+// Function to delete the daily trigger for copyFormulasDownDealsTab()
 function deleteDailyDealsFormulaTrigger() {
   const triggers = ScriptApp.getProjectTriggers()
     .filter(function(t) { return t.getHandlerFunction() === 'copyFormulasDownDealsTab'; });
@@ -319,6 +364,40 @@ function deleteDailyDealsFormulaTrigger() {
     5
   );
 }
+
+// NEW: Function to create a daily trigger for copyFormulasDownLineItemsTab()
+function createDailyLineItemsFormulaTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(function(t) { return t.getHandlerFunction() === 'copyFormulasDownLineItemsTab'; })
+    .forEach(function(t) { ScriptApp.deleteTrigger(t); });
+
+  // Trigger to run every day between 2:30 AM and 3:30 AM
+  ScriptApp.newTrigger('copyFormulasDownLineItemsTab')
+    .timeBased()
+    .everyDays(1)
+    .atHour(2) // 2 AM
+    .withMinute(30) // 2:30 AM
+    .create();
+
+  SpreadsheetApp.getActive().toast(
+    'Daily formula copy trigger for "' + LINE_ITEMS_SHEET_NAME + '" created (02:30 AM).',
+    'Line Items Formula Copy',
+    5
+  );
+}
+
+// NEW: Function to delete the daily trigger for copyFormulasDownLineItemsTab()
+function deleteDailyLineItemsFormulaTrigger() {
+  const triggers = ScriptApp.getProjectTriggers()
+    .filter(function(t) { return t.getHandlerFunction() === 'copyFormulasDownLineItemsTab'; });
+  triggers.forEach(function(t) { ScriptApp.deleteTrigger(t); });
+  SpreadsheetApp.getActive().toast(
+    'Deleted ' + triggers.length + ' daily formula copy trigger(s) for "' + LINE_ITEMS_SHEET_NAME + '".',
+    'Line Items Formula Copy',
+    5
+  );
+}
+
 
 /*** TRIGGER CLEANUP ***/
 function deleteForecastSnapshotTriggers() {
@@ -343,7 +422,7 @@ function deletePBFSnapshotTriggers() {
 }
 
 function deleteAllSnapshotTriggers() {
-  const handlers = { SnapshotForecast: true, SnapshotPBF: true, SnapshotSales: true, copyFormulasDownDealsTab: true }; // UPDATED
+  const handlers = { SnapshotForecast: true, SnapshotPBF: true, SnapshotSales: true, copyFormulasDownDealsTab: true, copyFormulasDownLineItemsTab: true }; // UPDATED
   const triggers = ScriptApp.getProjectTriggers()
     .filter(function(t) { return handlers[t.getHandlerFunction()]; });
   triggers.forEach(function(t) { ScriptApp.deleteTrigger(t); });
