@@ -371,16 +371,15 @@ function createDailyLineItemsFormulaTrigger() {
     .filter(function(t) { return t.getHandlerFunction() === 'copyFormulasDownLineItemsTab'; })
     .forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
-  // Trigger to run every day between 2:30 AM and 3:30 AM
+  // Trigger to run every day between 2 AM and 3 AM
   ScriptApp.newTrigger('copyFormulasDownLineItemsTab')
     .timeBased()
+    .everyDays(1)
     .atHour(2) // 2 AM
-    .atMinute(30) // 2:30 AM
-    .everyHours(24) // Changed from everyDays(1)
     .create();
 
   SpreadsheetApp.getActive().toast(
-    'Daily formula copy trigger for "' + LINE_ITEMS_SHEET_NAME + '" created (02:30 AM).',
+    'Daily formula copy trigger for "' + LINE_ITEMS_SHEET_NAME + '" created (between 02:00 AM and 03:00 AM).',
     'Line Items Formula Copy',
     5
   );
