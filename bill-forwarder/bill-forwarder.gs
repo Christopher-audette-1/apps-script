@@ -58,8 +58,9 @@ function runBillForwarder() {
         body: 'Attached bills:\n\n' + fileNames.join('\n'),
         attachments: attachments
       });
-      threads[i].addLabel(forwardedLabel);
     }
+    // Always add the label to mark the thread as reviewed, even if no attachments were forwarded.
+    threads[i].addLabel(forwardedLabel);
   }
 }
 
@@ -153,6 +154,8 @@ function previewBillForwarder() {
         });
       }
     }
+    // Always simulate adding the label to mark the thread as reviewed, even if no attachments were forwarded.
+    Logger.log('Simulating adding label "' + PREVIEW_EXCLUDE_LABEL + '" to thread ID: ' + threads[i].getId());
   }
   Logger.log('--- Bill Forwarder Preview Finished ---');
 }
