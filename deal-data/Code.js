@@ -376,7 +376,7 @@ function createDailyLineItemsFormulaTrigger() {
     .timeBased()
     .atHour(2) // 2 AM
     .atMinute(30) // 2:30 AM
-    .everyDays(1)
+    .everyHours(24) // Changed from everyDays(1)
     .create();
 
   SpreadsheetApp.getActive().toast(
